@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+}
+
+html, body, #root {
+  height: 100%;
+  background: white;
+  color: #111827;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body, #root { background: #0b0b0f; color: #f3f4f6; }
+}
+
+* { -webkit-touch-callout: none; }
