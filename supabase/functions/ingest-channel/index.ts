@@ -3,12 +3,16 @@
 // Invocation:
 //   POST /functions/v1/ingest-channel
 //   body: {} (uses hardcoded channel + teacher in Phase 1)
+// Optional body fields:
+//   transcripts: { [youtube_video_id]: { text: string, language?: string } }
+//     — pre-fetched transcripts to use instead of the TranscriptProvider
+//     chain. Used by scripts/ingest-local.mjs, which fetches captions from a
+//     residential IP because YouTube bot-walls datacenter IPs.
 // or POST with { channel_id: "UC...", teacher_id: "uuid" } once Phase 2 lands.
 //
 // For each recent video on the channel:
 //   1. fetch metadata + classify Short vs long (duration <=60s = short)
-//   2. fetch captions; if missing -> long videos go to needs_review,
-//      shorts attempt Whisper (TODO Phase 1.5 — see comment in transcribeShort)
+//   2. get a transcript (pushed > provider chain); if none -> needs_review
 //   3. detect language + level via AIProvider
 //   4. generate activities via AIProvider
 //   5. upsert video + insert activities; mark published or needs_review
@@ -19,11 +23,20 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.107.0';
 import {
   YouTubeClient,
-  fetchCaptions,
   type YouTubeVideoMeta,
 } from '../_shared/youtube.ts';
 import { getAIProvider } from '../_shared/provider-factory.ts';
 import { AIProviderError } from '../_shared/ai-types.ts';
+import {
+  fetchTranscriptViaChain,
+  getTranscriptProviders,
+} from '../_shared/transcript-factory.ts';
+import type { TranscriptProvider } from '../_shared/transcript-types.ts';
+
+interface PushedTranscript {
+  text?: string;
+  language?: string;
+}
 
 // --- Phase 1 hardcoded constants. Move to channel/teacher rows in Phase 2. ---
 const HARDCODED_CHANNEL_ID = 'UCK8WMyvZ1sFlhxie5tlaIdQ';
@@ -42,11 +55,17 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const body = await req.json().catch(() => ({})) as {
+      transcripts?: Record<string, PushedTranscript>;
+    };
+    const pushedTranscripts = body.transcripts ?? {};
+
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
       auth: { persistSession: false },
     });
     const yt = new YouTubeClient(YT_API_KEY);
     const ai = getAIProvider();
+    const transcriptProviders = getTranscriptProviders();
 
     // Ensure the demo teacher row exists.
     const teacher = await upsertDemoTeacher(supabase);
@@ -55,12 +74,19 @@ Deno.serve(async (req: Request) => {
     const videoIds = await yt.listRecentVideoIds(uploadsId, MAX_VIDEOS_PER_RUN);
     const metas = await yt.getVideoMeta(videoIds);
 
-    const results: Array<{ id: string; status: string; note?: string }> = [];
+    const results: Array<{ id: string; status: string; diag?: string; note?: string }> = [];
 
     for (const meta of metas) {
       try {
-        const result = await processVideo({ supabase, ai, teacherId: teacher.id, meta });
-        results.push({ id: meta.id, status: result });
+        const { status, diag } = await processVideo({
+          supabase,
+          ai,
+          transcriptProviders,
+          teacherId: teacher.id,
+          meta,
+          pushed: pushedTranscripts[meta.id],
+        });
+        results.push({ id: meta.id, status, diag });
       } catch (err) {
         console.error(`video ${meta.id} failed`, err);
         await supabase
@@ -91,10 +117,12 @@ Deno.serve(async (req: Request) => {
 async function processVideo(args: {
   supabase: ReturnType<typeof createClient>;
   ai: ReturnType<typeof getAIProvider>;
+  transcriptProviders: TranscriptProvider[];
   teacherId: string;
   meta: YouTubeVideoMeta;
-}): Promise<'published' | 'needs_review' | 'skipped'> {
-  const { supabase, ai, teacherId, meta } = args;
+  pushed?: PushedTranscript;
+}): Promise<{ status: 'published' | 'needs_review' | 'skipped'; diag: string }> {
+  const { supabase, ai, transcriptProviders, teacherId, meta, pushed } = args;
   const isShort = meta.durationSeconds <= SHORT_DURATION_THRESHOLD;
 
   // Skip if we've already processed this video successfully.
@@ -104,22 +132,28 @@ async function processVideo(args: {
     .eq('teacher_id', teacherId)
     .eq('youtube_video_id', meta.id)
     .maybeSingle();
-  if (existing && existing.status === 'published') return 'skipped';
+  if (existing && existing.status === 'published') {
+    return { status: 'skipped', diag: 'already_published' };
+  }
 
-  // 1. transcript
+  // 1. transcript: a pushed one wins; otherwise walk the provider chain.
   let transcript = '';
   let transcriptSource: 'captions' | 'whisper' | 'upload' | 'none' = 'none';
   let language: string | undefined;
-  const captionResult = await fetchCaptions(meta.id);
-  if (captionResult) {
-    transcript = captionResult.text;
+  let transcriptDiag = '';
+  if (pushed?.text?.trim()) {
+    transcript = pushed.text.trim();
     transcriptSource = 'captions';
-    language = captionResult.language;
-  } else if (isShort) {
-    // Phase 1.5: Whisper fallback for Shorts. Requires audio extract, which
-    // we don't have native binaries for inside Edge Functions. Marked as
-    // a follow-up; for now Shorts with no captions go to needs_review.
-    transcript = '';
+    language = pushed.language;
+    transcriptDiag = 'pushed';
+  } else {
+    const outcome = await fetchTranscriptViaChain(transcriptProviders, meta.id);
+    transcriptDiag = outcome.diag;
+    if (outcome.result) {
+      transcript = outcome.result.text;
+      transcriptSource = outcome.result.source;
+      language = outcome.result.language;
+    }
   }
 
   if (!transcript) {
@@ -127,9 +161,9 @@ async function processVideo(args: {
       transcript: null,
       transcript_source: 'none',
       status: 'needs_review',
-      needs_review_notes: { reason: 'no transcript available — teacher must upload one' },
+      needs_review_notes: { reason: 'no transcript available — teacher must upload one', diag: transcriptDiag },
     });
-    return 'needs_review';
+    return { status: 'needs_review', diag: `transcript_fetch: ${transcriptDiag}` };
   }
 
   // 2. detection + generation
@@ -165,7 +199,7 @@ async function processVideo(args: {
         status: 'needs_review',
         needs_review_notes: { reason: 'AI generation failed', error: String(err) },
       });
-      return 'needs_review';
+      return { status: 'needs_review', diag: `ai_error: ${String(err).slice(0, 200)}` };
     }
     throw err;
   }
@@ -199,7 +233,7 @@ async function processVideo(args: {
     );
   }
 
-  return finalStatus;
+  return { status: finalStatus, diag: `ok lang=${bundleLanguage} level=${bundleLevel} conf=${bundleConfidence}` };
 }
 
 async function upsertDemoTeacher(
