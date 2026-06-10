@@ -9,7 +9,7 @@ export default function Quiz({ payload }: Props) {
   const [score, setScore] = useState(0);
 
   const items = payload.items;
-  if (items.length === 0) return <p className="text-sm text-gray-500">No questions.</p>;
+  if (items.length === 0) return <p className="text-sm text-ink-400">No questions.</p>;
 
   const q = items[index];
   const done = index >= items.length;
@@ -17,10 +17,10 @@ export default function Quiz({ payload }: Props) {
   if (done) {
     return (
       <div className="text-center py-8">
-        <p className="text-2xl font-semibold">
+        <p className="font-display text-4xl font-semibold">
           {score} / {items.length}
         </p>
-        <p className="text-gray-500 mt-1">Nicely done.</p>
+        <p className="text-ink-500 mt-1">Nicely done.</p>
         <button
           type="button"
           onClick={() => {
@@ -28,7 +28,7 @@ export default function Quiz({ payload }: Props) {
             setPicked(null);
             setScore(0);
           }}
-          className="mt-6 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-medium"
+          className="mt-6 px-5 py-2.5 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors"
         >
           Try again
         </button>
@@ -47,7 +47,7 @@ export default function Quiz({ payload }: Props) {
 
   return (
     <div>
-      <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+      <div className="flex items-center justify-between text-xs text-ink-400 mb-2">
         <span>Quiz</span>
         <span>
           {index + 1} / {items.length}
@@ -68,12 +68,12 @@ export default function Quiz({ payload }: Props) {
               className={[
                 'w-full text-left px-4 py-3 rounded-xl border text-sm transition',
                 showRight
-                  ? 'bg-green-50 border-green-400 text-green-900 dark:bg-green-500/10 dark:text-green-300'
+                  ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
                   : showWrong
-                  ? 'bg-red-50 border-red-400 text-red-900 dark:bg-red-500/10 dark:text-red-300'
+                  ? 'bg-red-50 border-red-400 text-red-800'
                   : isAnswered
-                  ? 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500'
-                  : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 active:bg-gray-50',
+                  ? 'bg-paper-100 border-paper-300/70 text-ink-400'
+                  : 'bg-paper-50 border-paper-300/70 text-ink-900 hover:border-ink-400',
               ].join(' ')}
             >
               {opt}
@@ -83,14 +83,14 @@ export default function Quiz({ payload }: Props) {
       </div>
 
       {isAnswered && q.explanation && (
-        <p className="mt-3 text-sm text-gray-500">{q.explanation}</p>
+        <p className="mt-3 text-sm text-ink-500">{q.explanation}</p>
       )}
 
       {isAnswered && (
         <button
           type="button"
           onClick={next}
-          className="mt-4 w-full py-3 rounded-xl bg-brand-600 text-white text-sm font-medium"
+          className="mt-4 w-full py-3 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors"
         >
           {index + 1 === items.length ? 'See results' : 'Next question'}
         </button>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type {
   ActivityRow,
@@ -122,7 +122,7 @@ export default function TeacherPage() {
 
   if (state === 'loading') {
     return (
-      <main className="min-h-dvh flex items-center justify-center text-gray-500">
+      <main className="min-h-dvh flex items-center justify-center text-ink-400">
         Loading…
       </main>
     );
@@ -132,8 +132,18 @@ export default function TeacherPage() {
     return (
       <main className="min-h-dvh flex items-center justify-center p-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">Teacher not found</h1>
-          <p className="text-gray-500 mt-2">No teacher with slug “{teacherSlug}”.</p>
+          <h1 className="font-display text-2xl font-semibold">
+            Teacher not found
+          </h1>
+          <p className="text-ink-500 mt-2">
+            No teacher with handle “{teacherSlug}”.
+          </p>
+          <Link
+            to="/"
+            className="inline-block mt-5 text-emerald-600 font-medium hover:text-emerald-700"
+          >
+            ← Back to Lingua
+          </Link>
         </div>
       </main>
     );
@@ -142,33 +152,52 @@ export default function TeacherPage() {
   if (state === 'error' || !teacher) {
     return (
       <main className="min-h-dvh flex items-center justify-center p-6 text-center">
-        <p className="text-red-600">Something went wrong loading this page.</p>
+        <p className="text-red-700">Something went wrong loading this page.</p>
       </main>
     );
   }
 
+  const lessonCount = feed.length;
+
   return (
-    <main className="min-h-dvh pb-24 bg-white dark:bg-[#0b0b0f]">
-      <header className="px-5 pt-8 pb-6 bg-gradient-to-b from-brand-50 to-transparent dark:from-brand-700/20">
-        <div className="flex items-center gap-4">
-          {teacher.avatar_url ? (
-            <img
-              src={teacher.avatar_url}
-              alt=""
-              className="w-14 h-14 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-xl">
-              {teacher.display_name[0]?.toUpperCase()}
-            </div>
-          )}
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold truncate">
-              {teacher.display_name}
-            </h1>
-            {teacher.bio && (
-              <p className="text-sm text-gray-500 truncate">{teacher.bio}</p>
+    <main className="min-h-dvh pb-24 bg-paper-100 text-ink-900">
+      <header className="border-b border-paper-300/60 bg-paper-50">
+        <div className="max-w-2xl mx-auto px-5 sm:px-6">
+          <div className="h-14 flex items-center">
+            <Link
+              to="/"
+              className="font-display font-semibold tracking-tight text-ink-700 hover:text-ink-900"
+            >
+              Lingua
+            </Link>
+          </div>
+          <div className="flex items-center gap-4 pb-7 pt-2">
+            {teacher.avatar_url ? (
+              <img
+                src={teacher.avatar_url}
+                alt=""
+                className="w-16 h-16 rounded-full object-cover ring-1 ring-paper-300"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-600 font-display font-semibold text-2xl">
+                {teacher.display_name[0]?.toUpperCase()}
+              </div>
             )}
+            <div className="min-w-0">
+              <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight truncate">
+                {teacher.display_name}
+              </h1>
+              {teacher.bio ? (
+                <p className="text-sm text-ink-500 mt-1 line-clamp-2">
+                  {teacher.bio}
+                </p>
+              ) : null}
+              {lessonCount > 0 && (
+                <p className="text-xs text-ink-400 mt-1.5">
+                  {lessonCount} interactive {lessonCount === 1 ? 'lesson' : 'lessons'}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -176,50 +205,54 @@ export default function TeacherPage() {
       {feed.length > 0 && (
         <nav
           aria-label="Filter lessons"
-          className="sticky top-0 z-10 bg-white/90 dark:bg-[#0b0b0f]/90 backdrop-blur border-b border-gray-100 dark:border-white/10 px-3 sm:px-5 py-2 flex gap-2 overflow-x-auto [scrollbar-width:none]"
+          className="sticky top-0 z-10 bg-paper-100/85 backdrop-blur border-b border-paper-300/60"
         >
-          <FilterChip
-            label="All levels"
-            active={levelFilter === null}
-            onClick={() => setLevelFilter(null)}
-          />
-          {presentLevels.map((level) => (
+          <div className="max-w-2xl mx-auto px-3 sm:px-6 py-2.5 flex gap-2 overflow-x-auto no-scrollbar">
             <FilterChip
-              key={level}
-              label={level}
-              active={levelFilter === level}
-              onClick={() => setLevelFilter(levelFilter === level ? null : level)}
+              label="All levels"
+              active={levelFilter === null}
+              onClick={() => setLevelFilter(null)}
             />
-          ))}
-          <span className="mx-1 my-auto h-5 w-px flex-shrink-0 bg-gray-200 dark:bg-white/10" />
-          <FilterChip
-            label="Lessons"
-            active={typeFilter === 'long'}
-            onClick={() => setTypeFilter(typeFilter === 'long' ? 'all' : 'long')}
-          />
-          <FilterChip
-            label="Shorts"
-            active={typeFilter === 'short'}
-            onClick={() => setTypeFilter(typeFilter === 'short' ? 'all' : 'short')}
-          />
+            {presentLevels.map((level) => (
+              <FilterChip
+                key={level}
+                label={level}
+                active={levelFilter === level}
+                onClick={() => setLevelFilter(levelFilter === level ? null : level)}
+              />
+            ))}
+            <span className="mx-1 my-auto h-5 w-px flex-shrink-0 bg-paper-300" />
+            <FilterChip
+              label="Lessons"
+              active={typeFilter === 'long'}
+              onClick={() => setTypeFilter(typeFilter === 'long' ? 'all' : 'long')}
+            />
+            <FilterChip
+              label="Shorts"
+              active={typeFilter === 'short'}
+              onClick={() => setTypeFilter(typeFilter === 'short' ? 'all' : 'short')}
+            />
+          </div>
         </nav>
       )}
 
-      <section className="px-3 sm:px-5 mt-2 flex flex-col gap-4">
+      <section className="max-w-2xl mx-auto px-3 sm:px-6 mt-4 flex flex-col gap-4">
         {feed.length === 0 ? (
-          <p className="text-center text-gray-500 py-12">
+          <p className="text-center text-ink-400 py-16">
             No published lessons yet — check back soon.
           </p>
         ) : filtered.length === 0 ? (
-          <p className="text-center text-gray-500 py-12">
+          <p className="text-center text-ink-400 py-16">
             Nothing matches those filters yet.
           </p>
         ) : (
           sections.map((section) => (
             <div key={section.level} className="flex flex-col gap-4">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mt-3 first:mt-1">
-                {section.level === OTHER_LEVEL ? 'More' : `Level ${section.level}`}
-                <span className="ml-2 font-normal text-gray-400">
+              <h2 className="flex items-baseline gap-2 mt-4 first:mt-1">
+                <span className="font-display text-lg font-medium text-ink-900">
+                  {section.level === OTHER_LEVEL ? 'More' : `Level ${section.level}`}
+                </span>
+                <span className="text-sm text-ink-400">
                   {section.items.length}
                 </span>
               </h2>
@@ -252,10 +285,10 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex-shrink-0 rounded-full px-3 py-1 text-sm border transition-colors ${
+      className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-sm border transition-colors ${
         active
-          ? 'bg-brand-600 border-brand-600 text-white'
-          : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 active:bg-gray-50'
+          ? 'bg-ink-900 border-ink-900 text-paper-50'
+          : 'bg-paper-50 border-paper-300 text-ink-700 hover:border-ink-400'
       }`}
     >
       {label}

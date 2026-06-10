@@ -13,7 +13,7 @@ export default function FlashcardDeck({ payload }: Props) {
   const startX = useRef<number | null>(null);
 
   if (cards.length === 0) {
-    return <p className="text-sm text-gray-500">No flashcards.</p>;
+    return <p className="text-sm text-ink-400">No flashcards.</p>;
   }
 
   const card = cards[index];
@@ -45,7 +45,7 @@ export default function FlashcardDeck({ payload }: Props) {
 
   return (
     <div className="select-none">
-      <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+      <div className="flex items-center justify-between text-xs text-ink-400 mb-2">
         <span>Flashcards</span>
         <span>
           {index + 1} / {cards.length}
@@ -77,7 +77,7 @@ export default function FlashcardDeck({ payload }: Props) {
             }}
           >
             <CardFace side="front">
-              <div className="text-2xl sm:text-3xl font-semibold text-center px-4">
+              <div className="font-display text-3xl sm:text-4xl font-semibold text-center px-4">
                 {card.term}
               </div>
               {card.confidence !== undefined && card.confidence < 0.6 && (
@@ -91,7 +91,7 @@ export default function FlashcardDeck({ payload }: Props) {
                 {card.translation}
               </div>
               {card.example && (
-                <div className="text-sm text-gray-500 mt-3 text-center px-4">
+                <div className="text-sm text-ink-500 mt-3 text-center px-4">
                   {card.example}
                 </div>
               )}
@@ -105,14 +105,14 @@ export default function FlashcardDeck({ payload }: Props) {
           type="button"
           onClick={() => advance(-1)}
           disabled={atStart}
-          className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-white/10 text-sm font-medium disabled:opacity-40"
+          className="flex-1 py-3 rounded-xl bg-paper-200 text-ink-700 text-sm font-medium disabled:opacity-40"
         >
           Previous
         </button>
         <button
           type="button"
           onClick={() => setFlipped((f) => !f)}
-          className="flex-1 py-3 rounded-xl bg-brand-600 text-white text-sm font-medium"
+          className="flex-1 py-3 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors"
         >
           {flipped ? 'Show term' : 'Reveal'}
         </button>
@@ -120,7 +120,7 @@ export default function FlashcardDeck({ payload }: Props) {
           type="button"
           onClick={() => advance(1)}
           disabled={atEnd}
-          className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-white/10 text-sm font-medium disabled:opacity-40"
+          className="flex-1 py-3 rounded-xl bg-paper-200 text-ink-700 text-sm font-medium disabled:opacity-40"
         >
           Next
         </button>
@@ -138,7 +138,7 @@ function CardFace({
 }) {
   return (
     <div
-      className="absolute inset-0 rounded-2xl bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 shadow-sm flex items-center justify-center"
+      className="absolute inset-0 rounded-2xl bg-paper-50 border border-paper-300/70 shadow-sm flex items-center justify-center"
       style={{
         backfaceVisibility: 'hidden',
         transform: side === 'back' ? 'rotateY(180deg)' : undefined,
