@@ -17,7 +17,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2.107.0';
 import { getAIProvider } from '../_shared/provider-factory.ts';
 import { getTranscriptProviders } from '../_shared/transcript-factory.ts';
 import {
-  json,
   processVideoRow,
   type PushedTranscript,
   type VideoRow,
@@ -26,10 +25,28 @@ import {
 const DEFAULT_BATCH = 5;
 const MAX_BATCH = 10;
 
+// CORS so the onboarding page can drive the queue from the browser.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, 'Content-Type': 'application/json' },
+  });
+}
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS });
+  }
   if (req.method !== 'POST') {
     return json({ error: 'POST only' }, 405);
   }

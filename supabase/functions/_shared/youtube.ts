@@ -15,8 +15,82 @@ export interface YouTubeVideoMeta {
   publishedAt: string;
 }
 
+export interface ResolvedChannel {
+  channelId: string;
+  uploadsPlaylistId: string;
+  title: string;
+  thumbnailUrl: string;
+}
+
 export class YouTubeClient {
   constructor(private apiKey: string) {}
+
+  // Resolve a user-supplied channel reference — a channel ID (UC…), a channel
+  // URL, an @handle, or a free-text name — to its canonical id, uploads
+  // playlist, title and avatar.
+  async resolveChannel(input: string): Promise<ResolvedChannel> {
+    const raw = input.trim();
+    let mode: 'id' | 'handle' | 'search' = 'search';
+    let value = raw;
+
+    const urlMatch = raw.match(
+      /youtube\.com\/(?:channel\/(UC[\w-]{22})|(@[\w.-]+)|(?:c|user)\/([\w.-]+))/i,
+    );
+    if (urlMatch) {
+      if (urlMatch[1]) { mode = 'id'; value = urlMatch[1]; }
+      else if (urlMatch[2]) { mode = 'handle'; value = urlMatch[2]; }
+      else if (urlMatch[3]) { mode = 'search'; value = urlMatch[3]; }
+    } else if (/^UC[\w-]{22}$/.test(raw)) {
+      mode = 'id';
+    } else if (raw.startsWith('@')) {
+      mode = 'handle';
+    }
+
+    let channelId: string | undefined;
+    if (mode === 'id') {
+      channelId = value;
+    } else if (mode === 'handle') {
+      const handle = value.startsWith('@') ? value : `@${value}`;
+      const data = await this.get(
+        `${API_BASE}/channels?part=id&forHandle=${encodeURIComponent(handle)}&key=${this.apiKey}`,
+      );
+      channelId = data.items?.[0]?.id;
+      if (!channelId) throw new Error(`No channel for handle ${handle}`);
+    } else {
+      const data = await this.get(
+        `${API_BASE}/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(value)}&key=${this.apiKey}`,
+      );
+      channelId = data.items?.[0]?.id?.channelId;
+      if (!channelId) throw new Error(`No channel found for "${value}"`);
+    }
+
+    const data = await this.get(
+      `${API_BASE}/channels?part=snippet,contentDetails&id=${channelId}&key=${this.apiKey}`,
+    );
+    const item = data.items?.[0];
+    if (!item) throw new Error(`Channel ${channelId} not found`);
+    const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploads) throw new Error(`No uploads playlist for ${channelId}`);
+    return {
+      channelId: channelId!,
+      uploadsPlaylistId: uploads,
+      title: item.snippet?.title ?? 'Channel',
+      thumbnailUrl:
+        item.snippet?.thumbnails?.high?.url ??
+        item.snippet?.thumbnails?.medium?.url ??
+        item.snippet?.thumbnails?.default?.url ??
+        '',
+    };
+  }
+
+  // deno-lint-ignore no-explicit-any
+  private async get(url: string): Promise<any> {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`YouTube API ${res.status}: ${await res.text()}`);
+    }
+    return await res.json();
+  }
 
   async getUploadsPlaylistId(channelId: string): Promise<string> {
     const url = `${API_BASE}/channels?part=contentDetails&id=${channelId}&key=${this.apiKey}`;

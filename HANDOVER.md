@@ -26,7 +26,14 @@ The fundamental product brief is in README.md and in memory
   - `process-videos` — drains the queue, batch of ≤10 per invocation, via
     `claim_videos_for_processing()` (FOR UPDATE SKIP LOCKED; stale
     `processing` rows >10 min are reclaimable). Accepts pushed transcripts;
-    `batch_size: 0` = push-only.
+    `batch_size: 0` = push-only. Has CORS so the onboarding page can drive it.
+  - `connect-channel` — creator onboarding. POST `{ channel, display_name? }`
+    (channel = UC… id / URL / @handle / name); resolves via YouTube API,
+    upserts a teacher (reuses by `youtube_channel_id`, unique slug), and
+    indexes the catalogue via `syncCatalogue()`. Has CORS. ⚠️ UNAUTHENTICATED
+    + creates teachers + triggers paid processing — gate behind creator auth
+    before real creators (OAuth becomes an additional connect path later).
+    `sync-channel` now also uses the shared `syncCatalogue()` for the demo.
   - `evaluate-sentence` — learner-facing AI tutor. POST `{ word, translation?,
     language, level?, sentence }` → `{ rating, feedback, correction? }`. Called
     from the browser via `supabase.functions.invoke` (has CORS). Goes through
@@ -36,7 +43,11 @@ The fundamental product brief is in README.md and in memory
   - `ingest-channel` — DEPRECATED 410 stub (was v5); delete from dashboard.
 - **Secrets set in Supabase dashboard**: `AI_PROVIDER=openai`, `OPENAI_API_KEY`,
   `YOUTUBE_API_KEY`. (Sean pasted his OpenAI key in chat early on — he was told
-  to rotate it; assume he has or will.) `SUPADATA_API_KEY` NOT set yet.
+  to rotate it; assume he has or will.) **`SUPADATA_API_KEY` — Sean HAS a key;
+  set it in Project Settings → Edge Functions → Secrets. Until it's set,
+  server-side ingestion (connect-channel / process-videos) can't fetch
+  transcripts from Edge and videos go to `needs_review` (diag shows only
+  `innertube: …LOGIN_REQUIRED`, no `supadata:`). No redeploy needed once set.**
 - **Frontend** — Vite + React 19 + TS + Tailwind v4 + react-router-dom v7.
   Build + typecheck green; dev server on port 5173. Editorial design
   ("paper/ink/emerald", Fraunces serif). The public teacher page groups
@@ -44,6 +55,11 @@ The fundamental product brief is in README.md and in memory
   lesson opens an **activity picker** (flashcards, matching, gap-fill, quiz,
   quick-practice, plus **Make it personal**). Completion + saved sentences
   live in `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
+- **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`): enter
+  a channel → `connect-channel` indexes it → the page drives `process-videos`
+  in batches with a progress bar → "View your page". Landing-page CTAs point
+  here. Browser-driven processing is a testing convenience; pg_cron draining
+  the queue is the hands-off replacement (not built yet).
 - **Make it personal (free-write)** is a frontend-only activity synthesized
   from a lesson's flashcard terms (`VideoCard.parseActivities`): the learner
   writes a sentence using a target word, gets AI feedback via
@@ -148,10 +164,15 @@ Response includes per-video `diag` strings — use them to debug.
 
 ## Open tasks (as of 2026-06-09, post-unblock)
 
-1. **For serverless (cron-able) ingestion**: Sean signs up at supadata.ai and
-   sets `SUPADATA_API_KEY` in Supabase Edge Function secrets — the provider
-   chain picks it up automatically, no redeploy needed. Until then,
-   `node scripts/ingest-local.mjs` is the ingestion path.
+1. **Set `SUPADATA_API_KEY`** (Sean has the key) in Supabase Edge Function
+   secrets — the provider chain picks it up automatically, no redeploy. This
+   is the one thing blocking the `/connect` flow from producing *published*
+   lessons server-side (right now connected videos go to `needs_review`).
+   Until then, `node scripts/ingest-local.mjs` is the working ingestion path.
+1b. **Gate `connect-channel` behind creator auth** before onboarding real
+   creators (it's unauthenticated + triggers paid processing). Then add a
+   **pg_cron** job to drain the queue hands-off (replaces the browser-driven
+   processing loop on `/connect`).
 2. Delete the decommissioned `yt-test` and `ingest-channel` Edge Functions
    from the dashboard (both are 410 stubs).
 3. ~~Render `gap_fill` and `matching`~~ DONE (2026-06-10). All five activity

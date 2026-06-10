@@ -7,12 +7,14 @@ import { getAIProvider } from './provider-factory.ts';
 import { AIProviderError } from './ai-types.ts';
 import { fetchTranscriptViaChain } from './transcript-factory.ts';
 import type { TranscriptProvider } from './transcript-types.ts';
+import { YouTubeClient } from './youtube.ts';
 
 // --- Phase 1 hardcoded constants. Move to channel/teacher rows in Phase 2. ---
 export const HARDCODED_CHANNEL_ID = 'UCK8WMyvZ1sFlhxie5tlaIdQ';
 export const HARDCODED_TEACHER_SLUG = 'demo-teacher';
 export const SHORT_DURATION_THRESHOLD = 60;
 export const PUBLISH_CONFIDENCE_THRESHOLD = 0.6;
+export const FIRST_SYNC_QUEUE_LIMIT = 20;
 
 export type Supabase = ReturnType<typeof createClient>;
 
@@ -34,6 +36,123 @@ export interface TeacherRow {
   slug: string;
   uploads_playlist_id: string | null;
   last_synced_at: string | null;
+}
+
+export interface SyncResult {
+  first_sync: boolean;
+  channel_video_count: number;
+  new_videos: number;
+  queued_now: number;
+  queue_depth: number;
+}
+
+// Index a channel's full catalogue for one teacher: insert unknown videos as
+// 'not_processed', then queue per policy (first sync → latest N; later syncs →
+// every newly-discovered upload, so new uploads auto-process). Cheap: metadata
+// only, no AI. Shared by sync-channel and connect-channel.
+export async function syncCatalogue(
+  supabase: Supabase,
+  yt: YouTubeClient,
+  teacher: TeacherRow,
+  uploadsPlaylistId: string,
+  firstSyncQueueLimit = FIRST_SYNC_QUEUE_LIMIT,
+): Promise<SyncResult> {
+  const allIds = await yt.listAllVideoIds(uploadsPlaylistId);
+  const metas = await yt.getVideoMeta(allIds);
+
+  const { data: existingRows, error: exErr } = await supabase
+    .from('videos')
+    .select('youtube_video_id,youtube_published_at')
+    .eq('teacher_id', teacher.id);
+  if (exErr) throw exErr;
+  const existing = new Map(
+    (existingRows ?? []).map((r) => [
+      r.youtube_video_id as string,
+      r.youtube_published_at as string | null,
+    ]),
+  );
+
+  // Insert newly-discovered videos. Existing rows are never touched here —
+  // their status is owned by the worker / the teacher.
+  const newMetas = metas.filter((m) => !existing.has(m.id));
+  if (newMetas.length) {
+    const { error } = await supabase.from('videos').insert(
+      newMetas.map((m) => ({
+        teacher_id: teacher.id,
+        youtube_video_id: m.id,
+        title: m.title,
+        description: m.description,
+        thumbnail_url: m.thumbnailUrl,
+        duration_seconds: m.durationSeconds,
+        type: m.durationSeconds <= SHORT_DURATION_THRESHOLD ? 'short' : 'long',
+        status: 'not_processed',
+        youtube_published_at: m.publishedAt,
+      })),
+    );
+    if (error) throw error;
+  }
+
+  // Backfill youtube_published_at for rows created before the column existed.
+  for (const m of metas) {
+    if (existing.has(m.id) && !existing.get(m.id)) {
+      await supabase
+        .from('videos')
+        .update({ youtube_published_at: m.publishedAt })
+        .eq('teacher_id', teacher.id)
+        .eq('youtube_video_id', m.id);
+    }
+  }
+
+  // Queue policy.
+  const firstSync = !teacher.last_synced_at;
+  let queued = 0;
+  if (firstSync) {
+    const { data: toQueue, error } = await supabase
+      .from('videos')
+      .select('id')
+      .eq('teacher_id', teacher.id)
+      .eq('status', 'not_processed')
+      .order('youtube_published_at', { ascending: false })
+      .limit(firstSyncQueueLimit);
+    if (error) throw error;
+    if (toQueue?.length) {
+      const { error: qErr } = await supabase
+        .from('videos')
+        .update({ status: 'queued' })
+        .in('id', toQueue.map((v) => v.id));
+      if (qErr) throw qErr;
+      queued = toQueue.length;
+    }
+  } else if (newMetas.length) {
+    const { data: q, error } = await supabase
+      .from('videos')
+      .update({ status: 'queued' })
+      .eq('teacher_id', teacher.id)
+      .eq('status', 'not_processed')
+      .in('youtube_video_id', newMetas.map((m) => m.id))
+      .select('id');
+    if (error) throw error;
+    queued = q?.length ?? 0;
+  }
+
+  await supabase
+    .from('teachers')
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq('id', teacher.id);
+
+  const { count: queueDepth } = await supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('teacher_id', teacher.id)
+    .eq('status', 'queued');
+
+  return {
+    first_sync: firstSync,
+    channel_video_count: metas.length,
+    new_videos: newMetas.length,
+    queued_now: queued,
+    queue_depth: queueDepth ?? 0,
+  };
 }
 
 export async function upsertDemoTeacher(supabase: Supabase): Promise<TeacherRow> {

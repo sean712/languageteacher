@@ -27,12 +27,12 @@ function SiteNav() {
         >
           View demo
         </Link>
-        <a
-          href="#connect"
+        <Link
+          to="/connect"
           className="px-3.5 py-2 rounded-lg bg-ink-900 text-paper-50 font-medium hover:bg-ink-700 transition-colors"
         >
           Connect channel
-        </a>
+        </Link>
       </nav>
     </header>
   );
@@ -61,16 +61,13 @@ function Hero() {
             audience does more than watch. They learn.
           </p>
 
-          <div
-            id="connect"
-            className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center"
-          >
-            <a
-              href="#connect"
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
+            <Link
+              to="/connect"
               className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors shadow-sm"
             >
               Connect your channel
-            </a>
+            </Link>
             <Link
               to="/demo-teacher"
               className="inline-flex items-center justify-center gap-1.5 px-4 py-3.5 rounded-xl text-ink-900 font-medium hover:bg-paper-200/70 transition-colors"
@@ -275,12 +272,12 @@ function ShowcaseCTA() {
           themselves.
         </p>
         <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <a
-            href="#connect"
+          <Link
+            to="/connect"
             className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-500 text-paper-50 font-medium hover:bg-emerald-600 transition-colors"
           >
             Connect your channel
-          </a>
+          </Link>
           <Link
             to="/demo-teacher"
             className="inline-flex items-center justify-center gap-1.5 px-6 py-3.5 rounded-xl border border-paper-300/30 text-paper-100 font-medium hover:bg-paper-100/10 transition-colors"
