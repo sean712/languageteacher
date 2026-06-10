@@ -1,12 +1,12 @@
 // Local ingestion runner.
 //
 // YouTube refuses caption requests from datacenter IPs ("Sign in to confirm
-// you're not a bot"), so the deployed ingest-channel function can only fetch
-// transcripts itself when a hosted provider (SUPADATA_API_KEY) is configured.
-// This script closes the gap for free: it triggers ingestion, fetches
-// captions for any video the function couldn't transcribe — from THIS
-// machine's residential IP, via YouTube's Innertube API — and re-invokes the
-// function with the transcripts pushed in the request body.
+// you're not a bot"), so the deployed worker can only fetch transcripts
+// itself when a hosted provider (SUPADATA_API_KEY) is configured. This script
+// closes the gap for free: it syncs the channel catalogue, drains the
+// processing queue batch by batch, and for any video the server couldn't
+// transcribe it fetches captions from THIS machine's residential IP (via
+// YouTube's Innertube API) and pushes them to the worker.
 //
 // Usage: node scripts/ingest-local.mjs
 // Requires Node 18+ (built-in fetch). No dependencies.
@@ -15,9 +15,11 @@
 // supabase/functions/_shared/innertube-transcript-provider.ts (Deno) — keep
 // them in sync.
 
-const INGEST_URL =
-  process.env.INGEST_URL ??
-  'https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/ingest-channel';
+const FUNCTIONS_BASE =
+  process.env.FUNCTIONS_BASE ??
+  'https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1';
+const BATCH_SIZE = 5;
+const MAX_ITERATIONS = 50;
 
 const CLIENTS = [
   {
@@ -131,52 +133,72 @@ function decodeXmlEntities(s) {
     .replace(/&amp;/g, '&');
 }
 
-async function invokeIngest(payload) {
-  const res = await fetch(INGEST_URL, {
+async function invoke(fn, payload) {
+  const res = await fetch(`${FUNCTIONS_BASE}/${fn}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`ingest-channel ${res.status}: ${await res.text()}`);
+    throw new Error(`${fn} ${res.status}: ${await res.text()}`);
   }
   return res.json();
 }
 
-console.log('Pass 1: triggering ingestion (server-side transcript fetch)...');
-const pass1 = await invokeIngest({});
-for (const v of pass1.processed) {
-  console.log(`  ${v.id}  ${v.status}  ${v.diag ?? v.note ?? ''}`);
-}
-
-const stuck = pass1.processed.filter(
-  (v) => v.status === 'needs_review' && (v.diag ?? '').startsWith('transcript_fetch'),
-);
-if (!stuck.length) {
-  console.log('Nothing needs a locally-fetched transcript. Done.');
-  process.exit(0);
-}
-
-console.log(`\nFetching ${stuck.length} transcript(s) locally via Innertube...`);
-const transcripts = {};
-for (const v of stuck) {
-  const t = await fetchTranscript(v.id);
-  if (t) {
-    transcripts[v.id] = { text: t.text, language: t.language };
-    console.log(`  ${v.id}  ok (${t.client}, lang=${t.language}, ${t.text.length} chars)`);
-  } else {
-    console.log(`  ${v.id}  FAILED — no captions reachable from this IP either`);
+function printResults(processed) {
+  for (const v of processed) {
+    console.log(`  ${v.id}  ${v.status}  ${v.diag ?? ''}`);
   }
 }
 
-if (!Object.keys(transcripts).length) {
-  console.log('No transcripts fetched; nothing to push.');
-  process.exit(1);
+console.log('Syncing channel catalogue...');
+const sync = await invoke('sync-channel', {});
+console.log(
+  `  ${sync.channel_video_count} videos on channel, ${sync.new_videos} new, ` +
+  `${sync.queued_now} queued now (queue depth ${sync.queue_depth}, first_sync=${sync.first_sync})`,
+);
+
+let totals = { published: 0, needs_review: 0, failed: 0 };
+const tally = (processed) => {
+  for (const v of processed) totals[v.status] = (totals[v.status] ?? 0) + 1;
+};
+
+for (let i = 1; i <= MAX_ITERATIONS; i++) {
+  const res = await invoke('process-videos', { batch_size: BATCH_SIZE });
+  if (!res.processed.length && res.remaining_queued === 0) break;
+
+  console.log(`\nBatch ${i} (server-side):`);
+  printResults(res.processed);
+
+  // Anything the server couldn't transcribe: fetch locally and push back.
+  const stuck = res.processed.filter(
+    (v) => v.status === 'needs_review' && (v.diag ?? '').startsWith('transcript_fetch'),
+  );
+  const retried = new Set();
+  if (stuck.length) {
+    console.log(`  fetching ${stuck.length} transcript(s) locally via Innertube...`);
+    const transcripts = {};
+    for (const v of stuck) {
+      const t = await fetchTranscript(v.id);
+      if (t) {
+        transcripts[v.id] = { text: t.text, language: t.language };
+      } else {
+        console.log(`  ${v.id}  no captions reachable from this IP either — stays needs_review`);
+      }
+    }
+    if (Object.keys(transcripts).length) {
+      const pushRes = await invoke('process-videos', { batch_size: 0, transcripts });
+      printResults(pushRes.processed);
+      tally(pushRes.processed);
+      for (const v of pushRes.processed) retried.add(v.id);
+    }
+  }
+  tally(res.processed.filter((v) => !retried.has(v.id)));
+
+  if (res.remaining_queued === 0) break;
+  console.log(`  ${res.remaining_queued} still queued...`);
 }
 
-console.log('\nPass 2: re-invoking ingestion with pushed transcripts...');
-const pass2 = await invokeIngest({ transcripts });
-for (const v of pass2.processed) {
-  console.log(`  ${v.id}  ${v.status}  ${v.diag ?? v.note ?? ''}`);
-}
-console.log(`\nDone. Public page: /${pass2.teacher_slug}`);
+console.log(
+  `\nDone. published=${totals.published ?? 0} needs_review=${totals.needs_review ?? 0} failed=${totals.failed ?? 0}`,
+);

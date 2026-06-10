@@ -2,7 +2,13 @@
 // output once the CLI is set up locally.
 
 export type VideoType = 'short' | 'long';
-export type VideoStatus = 'processing' | 'published' | 'needs_review' | 'failed';
+export type VideoStatus =
+  | 'not_processed'
+  | 'queued'
+  | 'processing'
+  | 'published'
+  | 'needs_review'
+  | 'failed';
 export type TranscriptSource = 'captions' | 'whisper' | 'upload' | 'none';
 export type ActivityType =
   | 'flashcards'
@@ -20,6 +26,8 @@ export interface TeacherRow {
   avatar_url: string | null;
   youtube_channel_id: string | null;
   branding: Record<string, unknown>;
+  uploads_playlist_id: string | null;
+  last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +49,8 @@ export interface VideoRow {
   needs_review_notes: Record<string, unknown> | null;
   status: VideoStatus;
   published_at: string | null;
+  youtube_published_at: string | null;
+  processing_started_at: string | null;
   created_at: string;
   updated_at: string;
 }

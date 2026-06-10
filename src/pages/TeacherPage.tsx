@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type {
@@ -13,6 +13,16 @@ interface FeedItem {
   activities: ActivityRow[];
 }
 
+const CEFR_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const OTHER_LEVEL = 'Other';
+
+type TypeFilter = 'all' | 'long' | 'short';
+
+function levelOf(video: VideoRow): string {
+  const lvl = video.level?.trim().toUpperCase() ?? '';
+  return CEFR_ORDER.includes(lvl) ? lvl : OTHER_LEVEL;
+}
+
 export default function TeacherPage() {
   const { teacherSlug } = useParams<{ teacherSlug: string }>();
   const [teacher, setTeacher] = useState<TeacherRow | null>(null);
@@ -20,6 +30,8 @@ export default function TeacherPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>(
     'loading',
   );
+  const [levelFilter, setLevelFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
 
   useEffect(() => {
     if (!teacherSlug) return;
@@ -49,8 +61,8 @@ export default function TeacherPage() {
         .select('*')
         .eq('teacher_id', t.id)
         .eq('status', 'published')
-        .order('published_at', { ascending: false })
-        .limit(20);
+        .order('youtube_published_at', { ascending: false, nullsFirst: false })
+        .limit(200);
 
       if (cancelled) return;
       if (vErr) {
@@ -81,6 +93,32 @@ export default function TeacherPage() {
       cancelled = true;
     };
   }, [teacherSlug]);
+
+  const presentLevels = useMemo(() => {
+    const set = new Set(feed.map((item) => levelOf(item.video)));
+    return [...CEFR_ORDER, OTHER_LEVEL].filter((l) => set.has(l));
+  }, [feed]);
+
+  const filtered = useMemo(
+    () =>
+      feed.filter(
+        (item) =>
+          (typeFilter === 'all' || item.video.type === typeFilter) &&
+          (levelFilter === null || levelOf(item.video) === levelFilter),
+      ),
+    [feed, levelFilter, typeFilter],
+  );
+
+  // With no level selected, show the feed grouped into level sections.
+  const sections = useMemo(() => {
+    if (levelFilter !== null) return [{ level: levelFilter, items: filtered }];
+    return presentLevels
+      .map((level) => ({
+        level,
+        items: filtered.filter((item) => levelOf(item.video) === level),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [filtered, levelFilter, presentLevels]);
 
   if (state === 'loading') {
     return (
@@ -135,21 +173,92 @@ export default function TeacherPage() {
         </div>
       </header>
 
+      {feed.length > 0 && (
+        <nav
+          aria-label="Filter lessons"
+          className="sticky top-0 z-10 bg-white/90 dark:bg-[#0b0b0f]/90 backdrop-blur border-b border-gray-100 dark:border-white/10 px-3 sm:px-5 py-2 flex gap-2 overflow-x-auto [scrollbar-width:none]"
+        >
+          <FilterChip
+            label="All levels"
+            active={levelFilter === null}
+            onClick={() => setLevelFilter(null)}
+          />
+          {presentLevels.map((level) => (
+            <FilterChip
+              key={level}
+              label={level}
+              active={levelFilter === level}
+              onClick={() => setLevelFilter(levelFilter === level ? null : level)}
+            />
+          ))}
+          <span className="mx-1 my-auto h-5 w-px flex-shrink-0 bg-gray-200 dark:bg-white/10" />
+          <FilterChip
+            label="Lessons"
+            active={typeFilter === 'long'}
+            onClick={() => setTypeFilter(typeFilter === 'long' ? 'all' : 'long')}
+          />
+          <FilterChip
+            label="Shorts"
+            active={typeFilter === 'short'}
+            onClick={() => setTypeFilter(typeFilter === 'short' ? 'all' : 'short')}
+          />
+        </nav>
+      )}
+
       <section className="px-3 sm:px-5 mt-2 flex flex-col gap-4">
         {feed.length === 0 ? (
           <p className="text-center text-gray-500 py-12">
             No published lessons yet — check back soon.
           </p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-gray-500 py-12">
+            Nothing matches those filters yet.
+          </p>
         ) : (
-          feed.map((item) => (
-            <VideoCard
-              key={item.video.id}
-              video={item.video}
-              activities={item.activities}
-            />
+          sections.map((section) => (
+            <div key={section.level} className="flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mt-3 first:mt-1">
+                {section.level === OTHER_LEVEL ? 'More' : `Level ${section.level}`}
+                <span className="ml-2 font-normal text-gray-400">
+                  {section.items.length}
+                </span>
+              </h2>
+              {section.items.map((item) => (
+                <VideoCard
+                  key={item.video.id}
+                  video={item.video}
+                  activities={item.activities}
+                />
+              ))}
+            </div>
           ))
         )}
       </section>
     </main>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex-shrink-0 rounded-full px-3 py-1 text-sm border transition-colors ${
+        active
+          ? 'bg-brand-600 border-brand-600 text-white'
+          : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 active:bg-gray-50'
+      }`}
+    >
+      {label}
+    </button>
   );
 }

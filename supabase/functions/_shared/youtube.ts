@@ -45,7 +45,38 @@ export class YouTubeClient {
     );
   }
 
+  // Walks the whole uploads playlist (50 ids per page, 1 quota unit each).
+  // Cheap even for large channels; safetyCap guards against runaway paging.
+  async listAllVideoIds(playlistId: string, safetyCap = 2000): Promise<string[]> {
+    const ids: string[] = [];
+    let pageToken = '';
+    do {
+      const url =
+        `${API_BASE}/playlistItems?part=contentDetails&playlistId=${playlistId}` +
+        `&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}&key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`playlistItems.list failed: ${res.status} ${await res.text()}`);
+      }
+      const data = await res.json();
+      for (const i of data.items ?? []) {
+        ids.push((i as { contentDetails: { videoId: string } }).contentDetails.videoId);
+      }
+      pageToken = data.nextPageToken ?? '';
+    } while (pageToken && ids.length < safetyCap);
+    return ids;
+  }
+
   async getVideoMeta(videoIds: string[]): Promise<YouTubeVideoMeta[]> {
+    // videos.list accepts at most 50 ids per call.
+    const out: YouTubeVideoMeta[] = [];
+    for (let i = 0; i < videoIds.length; i += 50) {
+      out.push(...await this.getVideoMetaChunk(videoIds.slice(i, i + 50)));
+    }
+    return out;
+  }
+
+  private async getVideoMetaChunk(videoIds: string[]): Promise<YouTubeVideoMeta[]> {
     if (videoIds.length === 0) return [];
     const url = `${API_BASE}/videos?part=snippet,contentDetails&id=${videoIds.join(',')}&key=${this.apiKey}`;
     const res = await fetch(url);

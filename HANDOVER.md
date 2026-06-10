@@ -13,20 +13,28 @@ The fundamental product brief is in README.md and in memory
 - **Schema + RLS** applied (migrations: `phase1_schema`, `pin_trigger_search_path`).
   Security advisor: clean. Tables: `teachers`, `videos`, `content_uploads`,
   `activities`. `activities.payload` carries a `schema_version` (currently 1).
-- **Edge Function `ingest-channel` v5** deployed with `verify_jwt: false`.
-  URL: `https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/ingest-channel`
+- **Catalogue + queue model (2026-06-10).** The whole channel (77 videos) is
+  indexed in `videos`; the table itself is the processing queue. Statuses:
+  `not_processed` (indexed, teacher hasn't opted in) → `queued` →
+  `processing` → `published` / `needs_review` / `failed`. RLS exposes only
+  `published` to the public. Current counts: 17 published, 8 needs_review
+  (low AI confidence — correct behavior), 52 not_processed.
+- **Edge Functions** (all `verify_jwt: false` except the deprecated stub):
+  - `sync-channel` — walks the uploads playlist, inserts new videos as
+    `not_processed`. Queue policy: first sync queues latest 20; later syncs
+    queue every newly-discovered video (= new uploads auto-process).
+  - `process-videos` — drains the queue, batch of ≤10 per invocation, via
+    `claim_videos_for_processing()` (FOR UPDATE SKIP LOCKED; stale
+    `processing` rows >10 min are reclaimable). Accepts pushed transcripts;
+    `batch_size: 0` = push-only.
+  - `ingest-channel` — DEPRECATED 410 stub (was v5); delete from dashboard.
 - **Secrets set in Supabase dashboard**: `AI_PROVIDER=openai`, `OPENAI_API_KEY`,
   `YOUTUBE_API_KEY`. (Sean pasted his OpenAI key in chat early on — he was told
-  to rotate it; assume he has or will.)
-- **Frontend scaffold** at `/Users/sogrady/Documents/Languageteacher` —
-  Vite + React 19 + TS + Tailwind v4 + react-router-dom v7. Build + typecheck
-  green; dev server runs on port 5173.
-- **5 real videos** from the hardcoded channel `UCK8WMyvZ1sFlhxie5tlaIdQ`
-  (Welsh shorts/longs) processed END-TO-END on 2026-06-09: 4 `published`
-  (with flashcards/quiz/gap_fill/matching or quick_practice activities),
-  1 `needs_review` (114-char transcript → AI confidence 0.5, correctly below
-  the 0.6 publish threshold). The `SEED-DEMO-001` demo row has been deleted —
-  the page now shows only real data.
+  to rotate it; assume he has or will.) `SUPADATA_API_KEY` NOT set yet.
+- **Frontend** — Vite + React 19 + TS + Tailwind v4 + react-router-dom v7.
+  Build + typecheck green; dev server on port 5173. The public teacher page
+  groups published videos into CEFR level sections with a sticky filter bar
+  (level chips + Lessons/Shorts toggle).
 
 Visit `http://localhost:5173/demo-teacher` to see the public page rendering.
 
@@ -60,13 +68,13 @@ couldn't fetch captions. Diagnosis confirmed and extended:
   Edge; activates automatically when `SUPADATA_API_KEY` is set in Supabase
   secrets (NOT yet set — Sean needs to sign up if he wants serverless ingestion)
 - `_shared/transcript-factory.ts` — ordered chain: supadata (if key) → innertube
-- `ingest-channel` also accepts pre-fetched transcripts in the POST body:
+- `process-videos` accepts pre-fetched transcripts in the POST body:
   `{ transcripts: { [videoId]: { text, language? } } }`
 - `scripts/ingest-local.mjs` — **the current working path.** Run
-  `node scripts/ingest-local.mjs` from any residential connection: it triggers
-  ingestion, fetches transcripts locally via Innertube for whatever the server
-  couldn't get, and re-invokes the function with them pushed. This is how the
-  5 real videos were published.
+  `node scripts/ingest-local.mjs` from any residential connection: it syncs
+  the catalogue, drains the queue batch by batch, fetching transcripts
+  locally via Innertube for whatever the server couldn't get and pushing
+  them back. This is how all current published videos got there.
 
 Caveat: the channel's videos only have **English auto-generated (ASR)**
 caption tracks — no manual Welsh captions. The generation prompt already
@@ -90,9 +98,12 @@ is a known ceiling; Whisper or teacher-uploaded transcripts (Phase 2) lift it.
   (metadata only; captions live behind `TranscriptProvider`)
 - `supabase/functions/_shared/transcript-*.ts` + `innertube-transcript-provider.ts`
   + `supadata-provider.ts` — transcript acquisition (see blocker section above)
-- `supabase/functions/ingest-channel/index.ts` — the pipeline endpoint
-- `scripts/ingest-local.mjs` — local ingestion runner (residential-IP
-  transcript fetch + push)
+- `supabase/functions/_shared/pipeline.ts` — shared pipeline pieces
+  (processVideoRow, demo-teacher upsert, hardcoded Phase 1 constants)
+- `supabase/functions/sync-channel/index.ts` — catalogue indexer + queue policy
+- `supabase/functions/process-videos/index.ts` — queue worker
+- `scripts/ingest-local.mjs` — local ingestion runner (sync + drain +
+  residential-IP transcript fetch/push)
 - `src/pages/TeacherPage.tsx` — public mobile-first feed
 - `src/components/FlashcardDeck.tsx` — swipeable + tap-to-flip deck
 - `src/components/Quiz.tsx` — multiple-choice quiz
@@ -127,11 +138,14 @@ Response includes per-video `diag` strings — use them to debug.
    sets `SUPADATA_API_KEY` in Supabase Edge Function secrets — the provider
    chain picks it up automatically, no redeploy needed. Until then,
    `node scripts/ingest-local.mjs` is the ingestion path.
-2. Delete the decommissioned `yt-test` Edge Function from the dashboard
-   (already a 410 stub).
+2. Delete the decommissioned `yt-test` and `ingest-channel` Edge Functions
+   from the dashboard (both are 410 stubs).
 3. Render `gap_fill` and `matching` activities in `VideoCard.tsx` — they're
    generated and stored but not yet displayed (graceful degradation, by design).
-4. **Not yet done**, but were in the brief — defer to Phase 2 unless asked:
+4. The remaining 52 `not_processed` videos: teacher opt-in is the policy.
+   To process more now, flip rows to `queued` in SQL and run the local
+   runner (or just wait for the Phase 2 dashboard selection UI).
+5. **Not yet done**, but were in the brief — defer to Phase 2 unless asked:
    - Teacher auth + dashboard
    - OAuth channel linking
    - Supplementary content upload
