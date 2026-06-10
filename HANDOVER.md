@@ -55,11 +55,23 @@ The fundamental product brief is in README.md and in memory
   lesson opens an **activity picker** (flashcards, matching, gap-fill, quiz,
   quick-practice, plus **Make it personal**). Completion + saved sentences
   live in `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
-- **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`): enter
-  a channel → `connect-channel` indexes it → the page drives `process-videos`
-  in batches with a progress bar → "View your page". Landing-page CTAs point
-  here. The browser-driven loop is now a fallback/UX nicety — **pg_cron drains
-  the queue every minute on its own** (see below).
+- **Creator auth (magic link, 2026-06-10).** Supabase Auth email magic-link.
+  `src/lib/auth.tsx` (AuthProvider/useAuth), `/login` (`src/pages/Login.tsx`),
+  `RequireAuth` gates `/connect`. Landing nav shows Log in / Get started when
+  logged out. `connect-channel` is now **`verify_jwt=true`** — it reads the
+  caller's user id from the JWT and stamps `teacher.user_id` on the channel
+  they connect (unowned channels like the demo get claimed on first connect).
+  Google sign-in is deferred (UI says "coming soon") and will be added as a
+  second provider — it pairs with the future YouTube OAuth channel linking.
+  **Supabase setup the owner must do:** Auth → URL Configuration → add
+  `http://localhost:5173/**` (and the Vercel URL) to Redirect URLs; default
+  magic-link email uses Supabase SMTP (rate-limited, may hit spam) — wire
+  custom SMTP before launch.
+- **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`, behind
+  `RequireAuth`): enter a channel → `connect-channel` indexes it → the page
+  polls the public published count to show "N of M lessons ready" as **pg_cron
+  builds them** (no browser-driven processing / no open endpoint). Landing CTAs
+  point here.
 - **Autonomous pipeline (pg_cron + pg_net, 2026-06-10).** Two cron jobs (in
   `cron.job`): `drain-processing-queue` (every minute → POSTs `process-videos`
   via `net.http_post`) and `sync-demo-channel` (every 6h → `sync-channel`).
@@ -177,9 +189,12 @@ Response includes per-video `diag` strings — use them to debug.
    is the one thing blocking the `/connect` flow from producing *published*
    lessons server-side (right now connected videos go to `needs_review`).
    Until then, `node scripts/ingest-local.mjs` is the working ingestion path.
-1b. **Gate `connect-channel` behind creator auth** before onboarding real
-   creators (it's unauthenticated + triggers paid processing). ~~pg_cron~~
-   DONE — the queue drains itself every minute now.
+1b. ~~Gate `connect-channel` behind creator auth~~ DONE (magic link;
+   verify_jwt=true). ~~pg_cron~~ DONE. Remaining auth follow-ups: **Google
+   sign-in** (second provider), a **teacher dashboard** (owner-read RLS
+   already exists — list your channels, curate not_processed, work the
+   needs_review queue + transcript-correction loop), and a **sync-all-teachers**
+   cron once there are many channels (current sync cron is demo-only).
 1c. Low-severity advisor left open: `pg_net` is installed in the `public`
    schema. Moving it (`alter extension pg_net set schema extensions`) risks
    breaking the `net.http_post` calls in the cron jobs — do it carefully and

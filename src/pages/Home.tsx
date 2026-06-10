@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
 
 export default function Home() {
   return (
@@ -15,6 +16,7 @@ export default function Home() {
 }
 
 function SiteNav() {
+  const { session } = useAuth();
   return (
     <header className="max-w-5xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
       <Link to="/" className="font-display text-xl font-semibold tracking-tight">
@@ -27,11 +29,19 @@ function SiteNav() {
         >
           View demo
         </Link>
+        {!session && (
+          <Link
+            to="/login"
+            className="px-3 py-2 rounded-lg text-ink-700 hover:text-ink-900 hover:bg-paper-200/60 transition-colors"
+          >
+            Log in
+          </Link>
+        )}
         <Link
           to="/connect"
           className="px-3.5 py-2 rounded-lg bg-ink-900 text-paper-50 font-medium hover:bg-ink-700 transition-colors"
         >
-          Connect channel
+          {session ? 'Connect channel' : 'Get started'}
         </Link>
       </nav>
     </header>

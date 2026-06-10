@@ -8,11 +8,11 @@
 // (queuing the latest videos for processing). Processing itself is drained by
 // process-videos. Called from the browser, so it handles CORS.
 //
-// ⚠️ Phase 1: UNAUTHENTICATED and creates teachers + triggers paid processing.
-// Fine for solo testing; gate behind creator auth (and, later, OAuth channel
-// ownership) before onboarding real creators. The teacher.user_id stays null
-// until auth lands; OAuth becomes an additional connect path into the same
-// records.
+// Auth: deployed with verify_jwt=true, so only a logged-in creator can call
+// it. We read their user id from the JWT and stamp it on the teacher they
+// create (teacher.user_id), which is what the RLS owner policies key off.
+// Later, Google/YouTube OAuth becomes an additional connect path into the same
+// records. Still triggers paid processing — keep an eye on abuse once public.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.107.0';
 import { YouTubeClient } from '../_shared/youtube.ts';
@@ -29,7 +29,21 @@ const RESERVED_SLUGS = new Set(['connect', 'demo-teacher', 'api', 'admin']);
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const YT_API_KEY = Deno.env.get('YOUTUBE_API_KEY')!;
+
+// Identify the caller from their JWT (validated by the gateway via
+// verify_jwt=true). Returns the auth user id, or null if it can't be read.
+async function callerUserId(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return null;
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data } = await client.auth.getUser();
+  return data.user?.id ?? null;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -79,6 +93,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Enter a channel ID, URL or @handle.' }, 400);
     }
 
+    const userId = await callerUserId(req);
+    if (!userId) {
+      return json({ error: 'Please log in to connect a channel.' }, 401);
+    }
+
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
       auth: { persistSession: false },
     });
@@ -97,18 +116,23 @@ Deno.serve(async (req: Request) => {
     // Re-connecting an already-linked channel reuses its teacher.
     const { data: existing } = await supabase
       .from('teachers')
-      .select('id,slug,uploads_playlist_id,last_synced_at')
+      .select('id,slug,uploads_playlist_id,last_synced_at,user_id')
       .eq('youtube_channel_id', resolved.channelId)
       .maybeSingle();
 
     let teacher: TeacherRow;
     if (existing) {
       teacher = existing as TeacherRow;
+      const patch: Record<string, unknown> = {};
       if (!teacher.uploads_playlist_id) {
-        await supabase
-          .from('teachers')
-          .update({ uploads_playlist_id: resolved.uploadsPlaylistId })
-          .eq('id', teacher.id);
+        patch.uploads_playlist_id = resolved.uploadsPlaylistId;
+      }
+      // Claim an unowned channel (e.g. the seeded demo) for this creator.
+      if (!(existing as { user_id: string | null }).user_id) {
+        patch.user_id = userId;
+      }
+      if (Object.keys(patch).length) {
+        await supabase.from('teachers').update(patch).eq('id', teacher.id);
       }
     } else {
       const displayName = (body.display_name ?? '').trim() || resolved.title;
@@ -116,6 +140,7 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase
         .from('teachers')
         .insert({
+          user_id: userId,
           display_name: displayName,
           slug,
           youtube_channel_id: resolved.channelId,
@@ -138,6 +163,7 @@ Deno.serve(async (req: Request) => {
 
     return json({
       teacher_slug: teacher.slug,
+      teacher_id: teacher.id,
       channel_title: resolved.title,
       ...result,
     });
