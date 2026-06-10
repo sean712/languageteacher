@@ -5,10 +5,12 @@ import Quiz from './Quiz';
 import GapFill from './GapFill';
 import Matching from './Matching';
 import QuickPractice from './QuickPractice';
+import FreeWrite from './FreeWrite';
 import {
   ActivitySchemas,
   type ActivityType,
   type FlashcardsPayload,
+  type FreeWritePayload,
   type GapFillPayload,
   type MatchingPayload,
   type QuizPayload,
@@ -16,6 +18,12 @@ import {
 } from '../lib/activity-schemas';
 
 type Props = { video: VideoRow; activities: ActivityRow[] };
+
+// Menu types include 'free_write', a frontend-only activity synthesized from
+// a lesson's flashcard terms (not a stored activity row).
+type MenuType = ActivityType | 'free_write';
+
+const FREE_WRITE_MAX_WORDS = 6;
 
 // Order activities are offered in: warm-up → recall → production.
 const ACTIVITY_ORDER: ActivityType[] = [
@@ -26,28 +34,31 @@ const ACTIVITY_ORDER: ActivityType[] = [
   'quick_practice',
 ];
 
-const META: Record<ActivityType, { label: string; blurb: string }> = {
+const META: Record<MenuType, { label: string; blurb: string }> = {
   flashcards: { label: 'Flashcards', blurb: 'Learn the key words' },
   matching: { label: 'Matching', blurb: 'Pair them up' },
   gap_fill: { label: 'Fill the gaps', blurb: 'Complete the sentences' },
   quiz: { label: 'Quiz', blurb: 'Test yourself' },
   quick_practice: { label: 'Quick practice', blurb: 'One quick rep' },
+  free_write: { label: 'Make it personal', blurb: 'Write your own sentence' },
 };
 
 interface ParsedActivity {
-  type: ActivityType;
+  type: MenuType;
   count: number;
   payload: unknown;
 }
 
 function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
   const parsed: ParsedActivity[] = [];
+  let flashcards: FlashcardsPayload | null = null;
   for (const type of ACTIVITY_ORDER) {
     const row = activities.find((a) => a.type === type);
     if (!row) continue;
     const res = ActivitySchemas[type].safeParse(row.payload);
     if (!res.success) continue;
     const data = res.data;
+    if (type === 'flashcards') flashcards = data as FlashcardsPayload;
     const count =
       'items' in data
         ? data.items.length
@@ -56,10 +67,20 @@ function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
         : 1;
     parsed.push({ type, count, payload: data });
   }
+
+  // Capstone production task: turn the lesson's key words into a personal
+  // writing prompt with AI feedback. Only offered when there are terms to use.
+  if (flashcards && flashcards.items.length > 0) {
+    const items = flashcards.items
+      .slice(0, FREE_WRITE_MAX_WORDS)
+      .map((it) => ({ word: it.term, translation: it.translation }));
+    parsed.push({ type: 'free_write', count: items.length, payload: { items } });
+  }
+
   return parsed;
 }
 
-function countLabel(type: ActivityType, count: number): string {
+function countLabel(type: MenuType, count: number): string {
   switch (type) {
     case 'flashcards':
       return `${count} cards`;
@@ -71,6 +92,8 @@ function countLabel(type: ActivityType, count: number): string {
       return `${count} pairs`;
     case 'quick_practice':
       return 'Single prompt';
+    case 'free_write':
+      return 'with AI feedback';
   }
 }
 
@@ -106,7 +129,7 @@ function useCompleted(videoId: string) {
 
 export default function VideoCard({ video, activities }: Props) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<ActivityType | null>(null);
+  const [selected, setSelected] = useState<MenuType | null>(null);
   const [completed, markComplete] = useCompleted(video.id);
 
   const parsed = useMemo(() => parseActivities(activities), [activities]);
@@ -201,6 +224,7 @@ export default function VideoCard({ video, activities }: Props) {
             </p>
           ) : current ? (
             <FocusedActivity
+              video={video}
               parsed={current}
               completed={completed.has(current.type)}
               nextLabel={nextUp ? META[nextUp.type].label : null}
@@ -234,7 +258,7 @@ function ActivityMenu({
   completed: Set<string>;
   doneCount: number;
   allDone: boolean;
-  onPick: (t: ActivityType) => void;
+  onPick: (t: MenuType) => void;
 }) {
   return (
     <div>
@@ -288,6 +312,7 @@ function ActivityMenu({
 }
 
 function FocusedActivity({
+  video,
   parsed,
   completed,
   nextLabel,
@@ -295,6 +320,7 @@ function FocusedActivity({
   onBack,
   onNext,
 }: {
+  video: VideoRow;
   parsed: ParsedActivity;
   completed: boolean;
   nextLabel: string | null;
@@ -322,7 +348,7 @@ function FocusedActivity({
         </span>
       </div>
 
-      <ActivityBody parsed={parsed} onComplete={onComplete} />
+      <ActivityBody video={video} parsed={parsed} onComplete={onComplete} />
 
       {completed && (
         <div className="mt-5 pt-4 border-t border-paper-300/60 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
@@ -352,9 +378,11 @@ function FocusedActivity({
 }
 
 function ActivityBody({
+  video,
   parsed,
   onComplete,
 }: {
+  video: VideoRow;
   parsed: ParsedActivity;
   onComplete: () => void;
 }) {
@@ -391,10 +419,20 @@ function ActivityBody({
           onComplete={onComplete}
         />
       );
+    case 'free_write':
+      return (
+        <FreeWrite
+          payload={parsed.payload as FreeWritePayload}
+          language={video.language}
+          level={video.level}
+          videoId={video.id}
+          onComplete={onComplete}
+        />
+      );
   }
 }
 
-function ActivityIcon({ type }: { type: ActivityType }) {
+function ActivityIcon({ type }: { type: MenuType }) {
   const common = {
     width: 18,
     height: 18,
@@ -436,6 +474,13 @@ function ActivityIcon({ type }: { type: ActivityType }) {
       return (
         <svg {...common}>
           <path d="M13 2L3 14h7l-1 8 10-12h-7z" />
+        </svg>
+      );
+    case 'free_write':
+      return (
+        <svg {...common}>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
         </svg>
       );
   }

@@ -86,3 +86,12 @@ export const ActivityBundleSchema = z.object({
 });
 
 export type ActivityBundle = z.infer<typeof ActivityBundleSchema>;
+
+// Shape the model must emit when grading a learner's free-written sentence.
+export const SentenceFeedbackSchema = z.object({
+  rating: z.enum(['great', 'good', 'needs_work']),
+  feedback: z.string(),
+  correction: z.string().optional(),
+});
+
+export type SentenceFeedback = z.infer<typeof SentenceFeedbackSchema>;

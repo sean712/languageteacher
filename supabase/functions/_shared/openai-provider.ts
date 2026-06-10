@@ -1,7 +1,22 @@
 import OpenAI from 'npm:openai@6.42.0';
-import { AIProviderError, type AIProvider, type ActivityGenInput, type DetectResult } from './ai-types.ts';
-import { ActivityBundleSchema, type ActivityBundle } from './schemas.ts';
-import { activityGenerationPrompt, detectLanguageAndLevelPrompt } from './prompts.ts';
+import {
+  AIProviderError,
+  type AIProvider,
+  type ActivityGenInput,
+  type DetectResult,
+  type SentenceFeedback,
+  type SentenceFeedbackInput,
+} from './ai-types.ts';
+import {
+  ActivityBundleSchema,
+  SentenceFeedbackSchema,
+  type ActivityBundle,
+} from './schemas.ts';
+import {
+  activityGenerationPrompt,
+  detectLanguageAndLevelPrompt,
+  sentenceFeedbackPrompt,
+} from './prompts.ts';
 
 export class OpenAIProvider implements AIProvider {
   readonly name = 'openai';
@@ -38,6 +53,32 @@ export class OpenAIProvider implements AIProvider {
   async generateActivities(input: ActivityGenInput): Promise<ActivityBundle> {
     const { system, user } = activityGenerationPrompt(input);
     return await this.callAndParse(system, user, /* retry */ true);
+  }
+
+  async evaluateSentence(input: SentenceFeedbackInput): Promise<SentenceFeedback> {
+    const { system, user } = sentenceFeedbackPrompt(input);
+    const resp = await this.client.chat.completions.create({
+      model: this.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    });
+    const raw = resp.choices[0]?.message?.content ?? '{}';
+    let json: unknown;
+    try {
+      json = JSON.parse(raw);
+    } catch (e) {
+      throw new AIProviderError('feedback: invalid JSON from OpenAI', e, true);
+    }
+    const validated = SentenceFeedbackSchema.safeParse(json);
+    if (!validated.success) {
+      throw new AIProviderError(
+        `feedback: schema validation failed: ${JSON.stringify(validated.error.issues).slice(0, 300)}`,
+      );
+    }
+    return validated.data;
   }
 
   private async callAndParse(

@@ -27,14 +27,28 @@ The fundamental product brief is in README.md and in memory
     `claim_videos_for_processing()` (FOR UPDATE SKIP LOCKED; stale
     `processing` rows >10 min are reclaimable). Accepts pushed transcripts;
     `batch_size: 0` = push-only.
+  - `evaluate-sentence` — learner-facing AI tutor. POST `{ word, translation?,
+    language, level?, sentence }` → `{ rating, feedback, correction? }`. Called
+    from the browser via `supabase.functions.invoke` (has CORS). Goes through
+    `AIProvider.evaluateSentence` (added to the seam), so the OpenAI key stays
+    server-side. ⚠️ unauthenticated + per-call OpenAI cost — needs rate-limiting
+    before any public launch (only a 600-char cap guards it now).
   - `ingest-channel` — DEPRECATED 410 stub (was v5); delete from dashboard.
 - **Secrets set in Supabase dashboard**: `AI_PROVIDER=openai`, `OPENAI_API_KEY`,
   `YOUTUBE_API_KEY`. (Sean pasted his OpenAI key in chat early on — he was told
   to rotate it; assume he has or will.) `SUPADATA_API_KEY` NOT set yet.
 - **Frontend** — Vite + React 19 + TS + Tailwind v4 + react-router-dom v7.
-  Build + typecheck green; dev server on port 5173. The public teacher page
-  groups published videos into CEFR level sections with a sticky filter bar
-  (level chips + Lessons/Shorts toggle).
+  Build + typecheck green; dev server on port 5173. Editorial design
+  ("paper/ink/emerald", Fraunces serif). The public teacher page groups
+  published videos into CEFR level sections with a sticky filter bar; each
+  lesson opens an **activity picker** (flashcards, matching, gap-fill, quiz,
+  quick-practice, plus **Make it personal**). Completion + saved sentences
+  live in `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
+- **Make it personal (free-write)** is a frontend-only activity synthesized
+  from a lesson's flashcard terms (`VideoCard.parseActivities`): the learner
+  writes a sentence using a target word, gets AI feedback via
+  `evaluate-sentence`, and can save sentences. Upgrade path: make it an
+  AI-generated, pipeline-stored activity with bespoke prompts.
 
 Visit `http://localhost:5173/demo-teacher` to see the public page rendering.
 

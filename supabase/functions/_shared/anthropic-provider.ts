@@ -9,6 +9,8 @@ import {
   type AIProvider,
   type ActivityGenInput,
   type DetectResult,
+  type SentenceFeedback,
+  type SentenceFeedbackInput,
 } from './ai-types.ts';
 import type { ActivityBundle } from './schemas.ts';
 
@@ -28,6 +30,12 @@ export class AnthropicProvider implements AIProvider {
   generateActivities(_input: ActivityGenInput): Promise<ActivityBundle> {
     throw new AIProviderError(
       'AnthropicProvider.generateActivities is not implemented yet. Set AI_PROVIDER=openai or implement this method.',
+    );
+  }
+
+  evaluateSentence(_input: SentenceFeedbackInput): Promise<SentenceFeedback> {
+    throw new AIProviderError(
+      'AnthropicProvider.evaluateSentence is not implemented yet. Set AI_PROVIDER=openai or implement this method.',
     );
   }
 }

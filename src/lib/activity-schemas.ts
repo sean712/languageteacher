@@ -71,3 +71,23 @@ export const ActivitySchemas = {
 } as const;
 
 export type ActivityType = keyof typeof ActivitySchemas;
+
+// "Free write" is a frontend-only activity: the learner writes their own
+// sentence using a target word and gets AI feedback (see the evaluate-sentence
+// Edge Function). It is synthesized from a lesson's flashcard terms rather than
+// stored as an activity row, so it has no Zod schema here — just a shape.
+export interface FreeWriteItem {
+  word: string;
+  translation?: string;
+}
+
+export interface FreeWritePayload {
+  items: FreeWriteItem[];
+}
+
+// Response shape from the evaluate-sentence Edge Function.
+export interface SentenceFeedback {
+  rating: 'great' | 'good' | 'needs_work';
+  feedback: string;
+  correction?: string;
+}

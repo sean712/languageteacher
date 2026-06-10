@@ -1,9 +1,29 @@
 // Provider-agnostic prompts. Only the transport (OpenAI vs Anthropic API shape)
 // differs per provider — the prompt strings themselves live here.
 import { SCHEMA_VERSION } from './schemas.ts';
-import type { ActivityGenInput } from './ai-types.ts';
+import type { ActivityGenInput, SentenceFeedbackInput } from './ai-types.ts';
 
 const TRANSCRIPT_CAP = 18_000;
+const SENTENCE_CAP = 600;
+
+export function sentenceFeedbackPrompt(input: SentenceFeedbackInput): {
+  system: string;
+  user: string;
+} {
+  const translation = input.translation ? ` (meaning "${input.translation}")` : '';
+  const level = input.level ? ` at CEFR level ${input.level}` : '';
+  const system = `You are a warm, encouraging ${input.language} tutor. A learner${level} was asked to write their OWN sentence about their life using the word/phrase "${input.word}"${translation}. Give short, supportive feedback in English.
+
+Rules:
+1. Output ONLY valid JSON — no prose, no markdown, no code fences.
+2. Shape: {"rating": "great"|"good"|"needs_work", "feedback": string, "correction": string}.
+3. "feedback" is 1-2 warm sentences: name one thing they did well, and gently explain at most one fix. Encourage them — they are learning.
+4. "correction" is a corrected version of their sentence ONLY if it needs fixing; otherwise an empty string. Keep their meaning and personal content.
+5. If they did not actually use "${input.word}", gently point that out and set rating to "needs_work".
+6. Judge by ${input.language} grammar and natural usage, appropriate to their level. Don't be harsh about small things at lower levels.`;
+
+  return { system, user: input.sentence.slice(0, SENTENCE_CAP) };
+}
 
 export function detectLanguageAndLevelPrompt(text: string): {
   system: string;

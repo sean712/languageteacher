@@ -17,10 +17,28 @@ export interface ActivityGenInput {
   title?: string;
 }
 
+// A learner was asked to write their own sentence using a target word/phrase.
+// The provider returns warm, brief feedback on what they wrote.
+export interface SentenceFeedbackInput {
+  word: string;
+  translation?: string;
+  language: string;
+  level?: string;
+  sentence: string;
+}
+
+export interface SentenceFeedback {
+  rating: 'great' | 'good' | 'needs_work';
+  feedback: string;
+  // A corrected version of the learner's sentence, when a fix is warranted.
+  correction?: string;
+}
+
 export interface AIProvider {
   readonly name: string;
   detectLanguageAndLevel(text: string): Promise<DetectResult>;
   generateActivities(input: ActivityGenInput): Promise<ActivityBundle>;
+  evaluateSentence(input: SentenceFeedbackInput): Promise<SentenceFeedback>;
 }
 
 export class AIProviderError extends Error {
