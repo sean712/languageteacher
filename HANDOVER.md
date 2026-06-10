@@ -58,8 +58,16 @@ The fundamental product brief is in README.md and in memory
 - **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`): enter
   a channel → `connect-channel` indexes it → the page drives `process-videos`
   in batches with a progress bar → "View your page". Landing-page CTAs point
-  here. Browser-driven processing is a testing convenience; pg_cron draining
-  the queue is the hands-off replacement (not built yet).
+  here. The browser-driven loop is now a fallback/UX nicety — **pg_cron drains
+  the queue every minute on its own** (see below).
+- **Autonomous pipeline (pg_cron + pg_net, 2026-06-10).** Two cron jobs (in
+  `cron.job`): `drain-processing-queue` (every minute → POSTs `process-videos`
+  via `net.http_post`) and `sync-demo-channel` (every 6h → `sync-channel`).
+  With `SUPADATA_API_KEY` set, the whole loop runs hands-off: connect/queue a
+  video and it self-publishes within ~a minute. Verified end-to-end. SQL kept
+  in `supabase/migrations/20260610_pg_cron_autonomous_pipeline.sql` for
+  reference (migrations are applied via the Supabase MCP, not a tracked dir).
+  Inspect runs: `select * from cron.job_run_details order by start_time desc`.
 - **Make it personal (free-write)** is a frontend-only activity synthesized
   from a lesson's flashcard terms (`VideoCard.parseActivities`): the learner
   writes a sentence using a target word, gets AI feedback via
@@ -170,9 +178,12 @@ Response includes per-video `diag` strings — use them to debug.
    lessons server-side (right now connected videos go to `needs_review`).
    Until then, `node scripts/ingest-local.mjs` is the working ingestion path.
 1b. **Gate `connect-channel` behind creator auth** before onboarding real
-   creators (it's unauthenticated + triggers paid processing). Then add a
-   **pg_cron** job to drain the queue hands-off (replaces the browser-driven
-   processing loop on `/connect`).
+   creators (it's unauthenticated + triggers paid processing). ~~pg_cron~~
+   DONE — the queue drains itself every minute now.
+1c. Low-severity advisor left open: `pg_net` is installed in the `public`
+   schema. Moving it (`alter extension pg_net set schema extensions`) risks
+   breaking the `net.http_post` calls in the cron jobs — do it carefully and
+   re-verify cron afterwards.
 2. Delete the decommissioned `yt-test` and `ingest-channel` Edge Functions
    from the dashboard (both are 410 stubs).
 3. ~~Render `gap_fill` and `matching`~~ DONE (2026-06-10). All five activity
