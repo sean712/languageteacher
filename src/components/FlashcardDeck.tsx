@@ -1,16 +1,21 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FlashcardsPayload } from '../lib/activity-schemas';
 
-type Props = { payload: FlashcardsPayload };
+type Props = { payload: FlashcardsPayload; onComplete?: () => void };
 
 const SWIPE_THRESHOLD = 60;
 
-export default function FlashcardDeck({ payload }: Props) {
+export default function FlashcardDeck({ payload, onComplete }: Props) {
   const cards = payload.items;
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [dragX, setDragX] = useState(0);
   const startX = useRef<number | null>(null);
+
+  // Count the deck as done once the learner reaches the final card.
+  useEffect(() => {
+    if (cards.length > 0 && index === cards.length - 1) onComplete?.();
+  }, [index, cards.length, onComplete]);
 
   if (cards.length === 0) {
     return <p className="text-sm text-ink-400">No flashcards.</p>;

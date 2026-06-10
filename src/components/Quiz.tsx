@@ -1,18 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { QuizPayload } from '../lib/activity-schemas';
 
-type Props = { payload: QuizPayload };
+type Props = { payload: QuizPayload; onComplete?: () => void };
 
-export default function Quiz({ payload }: Props) {
+export default function Quiz({ payload, onComplete }: Props) {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
 
   const items = payload.items;
+  const done = items.length > 0 && index >= items.length;
+
+  // Mark complete once the learner reaches the results screen.
+  useEffect(() => {
+    if (done) onComplete?.();
+  }, [done, onComplete]);
+
   if (items.length === 0) return <p className="text-sm text-ink-400">No questions.</p>;
 
   const q = items[index];
-  const done = index >= items.length;
 
   if (done) {
     return (

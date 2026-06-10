@@ -140,8 +140,13 @@ Response includes per-video `diag` strings — use them to debug.
    `node scripts/ingest-local.mjs` is the ingestion path.
 2. Delete the decommissioned `yt-test` and `ingest-channel` Edge Functions
    from the dashboard (both are 410 stubs).
-3. Render `gap_fill` and `matching` activities in `VideoCard.tsx` — they're
-   generated and stored but not yet displayed (graceful degradation, by design).
+3. ~~Render `gap_fill` and `matching`~~ DONE (2026-06-10). All five activity
+   types now render. Expanding a lesson shows an **activity picker** (tiles);
+   the learner chooses one, does it in a focused view, and is handed to the
+   next. Completion is tracked per-device in `localStorage`
+   (`lingua:done:<videoId>`) with checkmarks + an "N done" badge. New
+   interactive components: `GapFill` (word-bank), `Matching` (tap-to-pair),
+   `QuickPractice` (extracted). `FlashcardDeck`/`Quiz` gained `onComplete`.
 4. The remaining 52 `not_processed` videos: teacher opt-in is the policy.
    To process more now, flip rows to `queued` in SQL and run the local
    runner (or just wait for the Phase 2 dashboard selection UI).
