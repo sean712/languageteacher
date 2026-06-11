@@ -17,7 +17,11 @@ import {
   type QuickPracticePayload,
 } from '../lib/activity-schemas';
 
-type Props = { video: VideoRow; activities: ActivityRow[] };
+type Props = {
+  video: VideoRow;
+  activities: ActivityRow[];
+  defaultOpen?: boolean;
+};
 
 // Menu types include 'free_write', a frontend-only activity synthesized from
 // a lesson's flashcard terms (not a stored activity row).
@@ -127,8 +131,8 @@ function useCompleted(videoId: string) {
   return [done, mark] as const;
 }
 
-export default function VideoCard({ video, activities }: Props) {
-  const [open, setOpen] = useState(false);
+export default function VideoCard({ video, activities, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
   const [selected, setSelected] = useState<MenuType | null>(null);
   const [completed, markComplete] = useCompleted(video.id);
 

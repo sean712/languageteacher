@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import type { TeacherRow, VideoRow } from '../lib/database.types';
@@ -15,6 +15,7 @@ const GENERATE_BATCH = 10;
 export default function ChannelManage() {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [load, setLoad] = useState<Load>('loading');
   const [teacher, setTeacher] = useState<TeacherRow | null>(null);
   const [videos, setVideos] = useState<VideoRow[]>([]);
@@ -230,6 +231,7 @@ export default function ChannelManage() {
               key={v.id}
               video={v}
               busy={busy.has(v.id)}
+              onReview={() => navigate(`/dashboard/${slug}/review/${v.id}`)}
               onPublish={() =>
                 setStatus(v, 'published', {
                   published_at: new Date().toISOString(),
@@ -248,17 +250,21 @@ export default function ChannelManage() {
 function VideoRowItem({
   video,
   busy,
+  onReview,
   onPublish,
   onUnpublish,
   onRegenerate,
 }: {
   video: VideoRow;
   busy: boolean;
+  onReview: () => void;
   onPublish: () => void;
   onUnpublish: () => void;
   onRegenerate: () => void;
 }) {
   const working = video.status === 'queued' || video.status === 'processing';
+  const reviewable =
+    video.status === 'needs_review' || video.status === 'published';
   const reason =
     (video.needs_review_notes as { reason?: string } | null)?.reason ??
     (video.ai_confidence != null && Number(video.ai_confidence) < 0.6
@@ -291,8 +297,11 @@ function VideoRowItem({
             </span>
           ) : (
             <>
+              {reviewable && (
+                <Action label="Review" primary={video.status === 'needs_review'} onClick={onReview} />
+              )}
               {video.status === 'needs_review' && (
-                <Action label="Publish" primary onClick={onPublish} />
+                <Action label="Publish" onClick={onPublish} />
               )}
               {video.status === 'published' && (
                 <Action label="Unpublish" onClick={onUnpublish} />

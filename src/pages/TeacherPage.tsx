@@ -14,6 +14,13 @@ interface FeedItem {
   activities: ActivityRow[];
 }
 
+interface ComingSoon {
+  id: string;
+  title: string | null;
+  thumbnail_url: string | null;
+  type: string | null;
+}
+
 const CEFR_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const OTHER_LEVEL = 'Other';
 
@@ -29,6 +36,7 @@ export default function TeacherPage() {
   const { user } = useAuth();
   const [teacher, setTeacher] = useState<TeacherRow | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [comingSoon, setComingSoon] = useState<ComingSoon[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>(
     'loading',
   );
@@ -58,9 +66,13 @@ export default function TeacherPage() {
       const t = tRaw as TeacherRow;
       setTeacher(t);
 
+      // Explicit safe columns: anon has column-level grants (not '*'), and
+      // VideoCard only needs these.
       const { data: videos, error: vErr } = await supabase
         .from('videos')
-        .select('*')
+        .select(
+          'id,teacher_id,youtube_video_id,title,thumbnail_url,type,duration_seconds,language,level,status,published_at,youtube_published_at',
+        )
         .eq('teacher_id', t.id)
         .eq('status', 'published')
         .order('youtube_published_at', { ascending: false, nullsFirst: false })
@@ -88,6 +100,20 @@ export default function TeacherPage() {
       }));
 
       setFeed(grouped);
+
+      // Upcoming lessons (in the pipeline or generated-but-pending), shown as a
+      // "coming soon" teaser. anon can only read safe columns of these rows
+      // (column grants); internal fields are never exposed.
+      const { data: soon } = await supabase
+        .from('videos')
+        .select('id,title,thumbnail_url,type,youtube_published_at')
+        .eq('teacher_id', t.id)
+        .in('status', ['queued', 'processing', 'needs_review'])
+        .order('youtube_published_at', { ascending: false, nullsFirst: false })
+        .limit(24);
+      if (cancelled) return;
+      setComingSoon((soon ?? []) as ComingSoon[]);
+
       setState('ready');
     })();
 
@@ -248,11 +274,11 @@ export default function TeacherPage() {
       )}
 
       <section className="max-w-2xl mx-auto px-3 sm:px-6 mt-4 flex flex-col gap-4">
-        {feed.length === 0 ? (
+        {feed.length === 0 && comingSoon.length === 0 ? (
           <p className="text-center text-ink-400 py-16">
-            No published lessons yet — check back soon.
+            No lessons yet — check back soon.
           </p>
-        ) : filtered.length === 0 ? (
+        ) : feed.length > 0 && filtered.length === 0 ? (
           <p className="text-center text-ink-400 py-16">
             Nothing matches those filters yet.
           </p>
@@ -277,8 +303,56 @@ export default function TeacherPage() {
             </div>
           ))
         )}
+
+        {comingSoon.length > 0 && (
+          <ComingSoonSection items={comingSoon} hasPublished={feed.length > 0} />
+        )}
       </section>
     </main>
+  );
+}
+
+function ComingSoonSection({
+  items,
+  hasPublished,
+}: {
+  items: ComingSoon[];
+  hasPublished: boolean;
+}) {
+  return (
+    <div className="mt-6">
+      <h2 className="font-display text-lg font-medium text-ink-900">
+        {hasPublished ? 'Coming soon' : 'Lessons on the way'}
+      </h2>
+      <p className="text-sm text-ink-500 mt-1">
+        {hasPublished
+          ? 'More lessons are being prepared from these videos.'
+          : 'Interactive lessons are being prepared from these videos — check back soon.'}
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+        {items.map((v) => (
+          <div key={v.id} className="flex flex-col gap-1.5">
+            <div className="relative aspect-video rounded-xl overflow-hidden bg-paper-200">
+              {v.thumbnail_url && (
+                <img
+                  src={v.thumbnail_url}
+                  alt=""
+                  className="w-full h-full object-cover opacity-70"
+                />
+              )}
+              <span className="absolute inset-0 grid place-items-center">
+                <span className="text-[11px] font-medium px-2 py-1 rounded-full bg-ink-900/75 text-paper-50">
+                  Lesson coming soon
+                </span>
+              </span>
+            </div>
+            <p className="text-xs text-ink-600 line-clamp-2 leading-snug">
+              {v.title ?? 'Untitled'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

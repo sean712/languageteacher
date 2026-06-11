@@ -4,6 +4,7 @@ import Connect from './pages/Connect';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChannelManage from './pages/ChannelManage';
+import ReviewVideo from './pages/ReviewVideo';
 import TeacherPage from './pages/TeacherPage';
 import RequireAuth from './components/RequireAuth';
 
@@ -25,6 +26,14 @@ export default function App() {
         element={
           <RequireAuth>
             <ChannelManage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/dashboard/:slug/review/:videoId"
+        element={
+          <RequireAuth>
+            <ReviewVideo />
           </RequireAuth>
         }
       />

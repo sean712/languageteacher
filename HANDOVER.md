@@ -81,6 +81,21 @@ The fundamental product brief is in README.md and in memory
   signed-in page a consistent Dashboard / email / Log out bar; the public
   teacher page shows a "Manage channel →" link to the owner; login now lands on
   `/dashboard`.
+- **Review a flagged video (2026-06-11).** `/dashboard/:slug/review/:videoId`
+  (`src/pages/ReviewVideo.tsx`): previews the generated activities exactly as
+  learners see them (reuses `VideoCard` with a new `defaultOpen` prop) and shows
+  the **source transcript** (which makes a low-confidence reason obvious at a
+  glance), then Publish / Unpublish / Regenerate. Reached via a "Review" button
+  on needs_review/published rows in ChannelManage.
+- **Public "coming soon" (2026-06-11).** The channel page shows in-pipeline
+  videos (`queued`/`processing`/`needs_review`) as thumbnails with a "Lesson
+  coming soon" badge, so a channel with nothing published yet still looks alive.
+  Security: replaced an initial SECURITY DEFINER view (advisor ERROR) with
+  **column-level grants** — `anon` can read only safe metadata columns of
+  `videos` (never `transcript`, `needs_review_notes`, `ai_confidence`, …) for
+  published + upcoming rows (migration `public_video_metadata_column_grants`).
+  Because of this, anon queries must select explicit columns, NOT `*` (a `*`
+  select 401s for anon now — see `TeacherPage` published query).
 - **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`, behind
   `RequireAuth`): enter a channel → `connect-channel` indexes it → the page
   polls the public published count to show "N of M lessons ready" as **pg_cron
