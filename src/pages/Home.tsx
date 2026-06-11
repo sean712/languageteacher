@@ -29,19 +29,17 @@ function SiteNav() {
         >
           View demo
         </Link>
-        {!session && (
-          <Link
-            to="/login"
-            className="px-3 py-2 rounded-lg text-ink-700 hover:text-ink-900 hover:bg-paper-200/60 transition-colors"
-          >
-            Log in
-          </Link>
-        )}
         <Link
-          to="/connect"
+          to={session ? '/dashboard' : '/login'}
+          className="px-3 py-2 rounded-lg text-ink-700 hover:text-ink-900 hover:bg-paper-200/60 transition-colors"
+        >
+          {session ? 'Dashboard' : 'Log in'}
+        </Link>
+        <Link
+          to={session ? '/dashboard' : '/connect'}
           className="px-3.5 py-2 rounded-lg bg-ink-900 text-paper-50 font-medium hover:bg-ink-700 transition-colors"
         >
-          {session ? 'Connect channel' : 'Get started'}
+          {session ? 'My channels' : 'Get started'}
         </Link>
       </nav>
     </header>

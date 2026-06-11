@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../lib/auth';
+import CreatorHeader from '../components/CreatorHeader';
 
 interface ConnectResult {
   teacher_slug: string;
@@ -19,7 +19,6 @@ const MAX_POLLS = 48; // ~4 minutes
 
 export default function Connect() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
   const [channel, setChannel] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phase, setPhase] = useState<Phase>('form');
@@ -85,26 +84,7 @@ export default function Connect() {
 
   return (
     <main className="min-h-dvh bg-paper-100 text-ink-900">
-      <header className="max-w-2xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
-        <Link to="/" className="font-display text-xl font-semibold tracking-tight">
-          Lingua
-        </Link>
-        <div className="flex items-center gap-3 text-sm">
-          {user?.email && (
-            <span className="text-ink-400 hidden sm:inline">{user.email}</span>
-          )}
-          <button
-            type="button"
-            onClick={async () => {
-              await signOut();
-              navigate('/');
-            }}
-            className="text-ink-600 hover:text-ink-900"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
+      <CreatorHeader />
 
       <section className="max-w-2xl mx-auto px-5 sm:px-8 pt-8 sm:pt-14 pb-20">
         <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
@@ -230,6 +210,13 @@ export default function Connect() {
                 Connect another
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/dashboard/${result.teacher_slug}`)}
+              className="mt-3 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              Manage this channel in your dashboard →
+            </button>
           </StatusCard>
         )}
       </section>

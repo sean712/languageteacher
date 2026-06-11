@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import type {
   ActivityRow,
   TeacherRow,
@@ -25,6 +26,7 @@ function levelOf(video: VideoRow): string {
 
 export default function TeacherPage() {
   const { teacherSlug } = useParams<{ teacherSlug: string }>();
+  const { user } = useAuth();
   const [teacher, setTeacher] = useState<TeacherRow | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>(
@@ -158,18 +160,27 @@ export default function TeacherPage() {
   }
 
   const lessonCount = feed.length;
+  const isOwner = Boolean(user && teacher.user_id && teacher.user_id === user.id);
 
   return (
     <main className="min-h-dvh pb-24 bg-paper-100 text-ink-900">
       <header className="border-b border-paper-300/60 bg-paper-50">
         <div className="max-w-2xl mx-auto px-5 sm:px-6">
-          <div className="h-14 flex items-center">
+          <div className="h-14 flex items-center justify-between">
             <Link
               to="/"
               className="font-display font-semibold tracking-tight text-ink-700 hover:text-ink-900"
             >
               Lingua
             </Link>
+            {isOwner && (
+              <Link
+                to={`/dashboard/${teacher.slug}`}
+                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+              >
+                Manage channel →
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-4 pb-7 pt-2">
             {teacher.avatar_url ? (

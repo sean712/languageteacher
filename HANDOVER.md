@@ -67,6 +67,20 @@ The fundamental product brief is in README.md and in memory
   `http://localhost:5173/**` (and the Vercel URL) to Redirect URLs; default
   magic-link email uses Supabase SMTP (rate-limited, may hit spam) — wire
   custom SMTP before launch.
+- **Creator dashboard (2026-06-11).** `/dashboard` (`src/pages/Dashboard.tsx`)
+  lists the signed-in creator's channels with status counts; `/dashboard/:slug`
+  (`src/pages/ChannelManage.tsx`) is the management view — status tiles
+  (published / need review / working / not started), a plain-English banner
+  explaining why nothing's published, a per-video list with status badges +
+  needs_review reasons, and actions: **Publish** (owner override of a
+  needs_review), **Unpublish**, **Regenerate** (→ queued), and **Generate N
+  more** from the not_started backlog. All client-side via RLS: owner-read
+  already existed; added an `update` policy `teachers can update their own
+  videos` (migration `owner_can_update_videos`; permits any column on own rows
+  — dashboard only sets `status`; tighten later). `CreatorHeader` gives every
+  signed-in page a consistent Dashboard / email / Log out bar; the public
+  teacher page shows a "Manage channel →" link to the owner; login now lands on
+  `/dashboard`.
 - **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`, behind
   `RequireAuth`): enter a channel → `connect-channel` indexes it → the page
   polls the public published count to show "N of M lessons ready" as **pg_cron
@@ -189,12 +203,24 @@ Response includes per-video `diag` strings — use them to debug.
    is the one thing blocking the `/connect` flow from producing *published*
    lessons server-side (right now connected videos go to `needs_review`).
    Until then, `node scripts/ingest-local.mjs` is the working ingestion path.
-1b. ~~Gate `connect-channel` behind creator auth~~ DONE (magic link;
-   verify_jwt=true). ~~pg_cron~~ DONE. Remaining auth follow-ups: **Google
-   sign-in** (second provider), a **teacher dashboard** (owner-read RLS
-   already exists — list your channels, curate not_processed, work the
-   needs_review queue + transcript-correction loop), and a **sync-all-teachers**
-   cron once there are many channels (current sync cron is demo-only).
+1b. ~~Gate connect-channel behind auth~~, ~~pg_cron~~, ~~teacher dashboard~~ all
+   DONE. Remaining: **Whisper transcription** (the big one — see content-quality
+   note below), **Google sign-in**, the **transcript-correction loop** in the
+   dashboard (let creators paste a correct transcript for a needs_review video),
+   and a **sync-all-teachers** cron (current sync cron is demo-only, so connected
+   channels other than the demo won't auto-discover new uploads yet).
+1d. **Content quality / low-resource languages (learned 2026-06-11).** A real
+   creator connected an Irish channel (`UCuEia7cE8Wm8yMCPMFT5CbA`): 0 published,
+   all needs_review. Root cause — the videos only have **English ASR captions of
+   spoken Irish** (garbled noise), so the AI output is unreliable and correctly
+   scores <0.6 confidence. There's no Irish caption track to prefer. The fix is
+   NOT lowering the threshold (would publish junk) — it's better transcripts:
+   **Whisper with the target language** (transcribe the actual audio) and/or
+   teacher-supplied transcripts. The auto-caption approach works well for
+   high-resource languages (Spanish/French/etc., good captions) but is marginal
+   for Irish/Welsh taught via immersion video. Also a cost note: every video
+   costs ~2 OpenAI calls even when it lands in needs_review (hidden), so
+   connecting low-caption channels spends money for nothing — worth a guard.
 1c. Low-severity advisor left open: `pg_net` is installed in the `public`
    schema. Moving it (`alter extension pg_net set schema extensions`) risks
    breaking the `net.http_post` calls in the cron jobs — do it carefully and

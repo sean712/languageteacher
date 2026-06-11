@@ -4,9 +4,9 @@ import { supabase } from '../lib/supabase';
 
 export default function Login() {
   const location = useLocation();
-  // Where to land after clicking the magic link (defaults to /connect).
+  // Where to land after clicking the magic link (defaults to the dashboard).
   const next =
-    (location.state as { from?: string } | null)?.from ?? '/connect';
+    (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>(
