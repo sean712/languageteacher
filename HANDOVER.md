@@ -218,6 +218,18 @@ Response includes per-video `diag` strings — use them to debug.
    - needs_review queue UI
    - pg_cron schedule for ingestion
 
+## Vercel deploy (blank-page fix, 2026-06-11)
+
+Symptom: Vercel showed a blank paper-coloured page. Cause: the `VITE_*` vars
+are inlined at build time and weren't set on Vercel, so `supabase.ts` produced
+an unconfigured client. Fixes shipped: `supabase.ts` no longer throws at import
+(flags `isSupabaseConfigured`); `AppGate` renders a "Configuration needed"
+screen + an ErrorBoundary instead of a blank page; `vercel.json` adds SPA
+rewrites. **Sean still needs to**: set `VITE_SUPABASE_URL` +
+`VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel env vars and redeploy, then add the
+Vercel URL to Supabase Auth Redirect URLs + Site URL (see README). Values are
+in local `.env.local`.
+
 ## Things Sean has said to remember
 
 - **Mobile-first is non-negotiable**; desktop is secondary.

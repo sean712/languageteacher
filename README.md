@@ -35,6 +35,22 @@ npm run dev
 Visit `http://localhost:5173/demo-teacher` to see the teacher feed once the
 pipeline has run at least once.
 
+## Deploying the frontend (Vercel)
+
+The two `VITE_*` vars are **inlined at build time**, so they must be set in
+Vercel before building — not just locally (`.env.local` is gitignored and never
+reaches Vercel). Missing them shows a "Configuration needed" screen.
+
+1. Vercel → Project → Settings → Environment Variables, add (Production +
+   Preview): `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
+2. **Redeploy** (env changes only take effect on a new build).
+3. Supabase → Auth → URL Configuration → add your Vercel URL to **Redirect
+   URLs** (e.g. `https://your-app.vercel.app/**`) so magic-link sign-in returns
+   to the app. Set the **Site URL** to your Vercel URL too.
+
+`vercel.json` already rewrites all routes to `index.html` for client-side
+routing (so `/connect`, `/login`, `/:teacher` work on refresh/deep-link).
+
 ## Running the ingest pipeline
 
 The pipeline lives in `supabase/functions/ingest-channel/`. Deploy and run:

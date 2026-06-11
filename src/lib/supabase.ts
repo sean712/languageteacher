@@ -3,13 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!url || !key) {
-  throw new Error(
-    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY in .env.local',
-  );
-}
+// These are inlined by Vite at BUILD time, so they must be present in the
+// build environment (locally in .env.local; on Vercel as project env vars).
+// If they're missing we DON'T throw at import — that would crash the whole
+// bundle before React mounts and leave a blank page. Instead we flag it and
+// the app root renders a clear configuration screen. The placeholder client
+// below is never actually used in that case.
+export const isSupabaseConfigured = Boolean(url && key);
 
-// Untyped client for now. Once `supabase gen types` is wired up in CI, swap to
-// createClient<Database>(...) — the hand-written types in ./database.types.ts
-// would otherwise drift from the actual schema.
-export const supabase = createClient(url, key);
+export const supabase = createClient(
+  url || 'https://placeholder.supabase.co',
+  key || 'placeholder-anon-key',
+);
