@@ -56,6 +56,7 @@ interface ParsedActivity {
 function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
   const parsed: ParsedActivity[] = [];
   let flashcards: FlashcardsPayload | null = null;
+  let quickPractice: QuickPracticePayload | null = null;
   for (const type of ACTIVITY_ORDER) {
     const row = activities.find((a) => a.type === type);
     if (!row) continue;
@@ -63,6 +64,7 @@ function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
     if (!res.success) continue;
     const data = res.data;
     if (type === 'flashcards') flashcards = data as FlashcardsPayload;
+    if (type === 'quick_practice') quickPractice = data as QuickPracticePayload;
     const count =
       'items' in data
         ? data.items.length
@@ -72,13 +74,20 @@ function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
     parsed.push({ type, count, payload: data });
   }
 
-  // Capstone production task: turn the lesson's key words into a personal
-  // writing prompt with AI feedback. Only offered when there are terms to use.
+  // Capstone production task: a personal writing prompt with AI feedback.
+  // Prefer the lesson's flashcard terms; for a Short (just a quick_practice)
+  // fall back to its answer so there's still something active to do.
   if (flashcards && flashcards.items.length > 0) {
     const items = flashcards.items
       .slice(0, FREE_WRITE_MAX_WORDS)
       .map((it) => ({ word: it.term, translation: it.translation }));
     parsed.push({ type: 'free_write', count: items.length, payload: { items } });
+  } else if (quickPractice && quickPractice.answer.trim()) {
+    parsed.push({
+      type: 'free_write',
+      count: 1,
+      payload: { items: [{ word: quickPractice.answer.trim() }] },
+    });
   }
 
   return parsed;
@@ -175,11 +184,6 @@ export default function VideoCard({ video, activities, defaultOpen = false }: Pr
               {video.title ?? 'Untitled lesson'}
             </h3>
             <div className="flex items-center gap-2 mt-2 text-xs text-ink-400">
-              {video.level && (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
-                  {video.level}
-                </span>
-              )}
               {video.language && (
                 <span className="capitalize">{video.language}</span>
               )}

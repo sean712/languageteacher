@@ -105,12 +105,16 @@ export default function Connect() {
               <input
                 value={channel}
                 onChange={(e) => setChannel(e.target.value)}
-                placeholder="@channel, UC… ID, or youtube.com/@channel"
+                placeholder="@handle or youtube.com/@handle"
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
                 className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
               />
+              <span className="block text-xs text-ink-400 mt-1.5">
+                Best to use the channel's @handle or URL — a name can match the
+                wrong channel, and a pasted ID might be a featured channel.
+              </span>
             </label>
             <label className="block">
               <span className="text-sm font-medium">

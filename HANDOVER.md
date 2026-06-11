@@ -50,11 +50,19 @@ The fundamental product brief is in README.md and in memory
   `innertube: …LOGIN_REQUIRED`, no `supadata:`). No redeploy needed once set.**
 - **Frontend** — Vite + React 19 + TS + Tailwind v4 + react-router-dom v7.
   Build + typecheck green; dev server on port 5173. Editorial design
-  ("paper/ink/emerald", Fraunces serif). The public teacher page groups
-  published videos into CEFR level sections with a sticky filter bar; each
-  lesson opens an **activity picker** (flashcards, matching, gap-fill, quiz,
-  quick-practice, plus **Make it personal**). Completion + saved sentences
-  live in `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
+  ("paper/ink/emerald", Fraunces serif). The public teacher page is a flat
+  newest-first feed with an All/Lessons/Shorts filter; each lesson opens an
+  **activity picker** (flashcards, matching, gap-fill, quiz, quick-practice,
+  plus **Make it personal**). Completion + saved sentences live in
+  `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
+  NOTE (2026-06-11): **CEFR levels (A1/B1…) are no longer shown** anywhere
+  public-facing — the field is still generated/stored but hidden (Sean found it
+  unreliable + may expand beyond language learning). **Make it personal now
+  also appears on Shorts** (synthesized from the quick_practice answer when
+  there are no flashcards) so a Short isn't just one question.
+  Channel-resolution gotcha: a free-text name or a channel ID copied from page
+  source can match the WRONG channel (e.g. a creator's secondary/featured
+  channel) — the connect form now steers users to the @handle/URL.
 - **Creator auth (magic link, 2026-06-10).** Supabase Auth email magic-link.
   `src/lib/auth.tsx` (AuthProvider/useAuth), `/login` (`src/pages/Login.tsx`),
   `RequireAuth` gates `/connect`. Landing nav shows Log in / Get started when

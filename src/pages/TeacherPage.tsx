@@ -21,15 +21,7 @@ interface ComingSoon {
   type: string | null;
 }
 
-const CEFR_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-const OTHER_LEVEL = 'Other';
-
 type TypeFilter = 'all' | 'long' | 'short';
-
-function levelOf(video: VideoRow): string {
-  const lvl = video.level?.trim().toUpperCase() ?? '';
-  return CEFR_ORDER.includes(lvl) ? lvl : OTHER_LEVEL;
-}
 
 export default function TeacherPage() {
   const { teacherSlug } = useParams<{ teacherSlug: string }>();
@@ -40,7 +32,6 @@ export default function TeacherPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>(
     'loading',
   );
-  const [levelFilter, setLevelFilter] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
 
   useEffect(() => {
@@ -122,31 +113,13 @@ export default function TeacherPage() {
     };
   }, [teacherSlug]);
 
-  const presentLevels = useMemo(() => {
-    const set = new Set(feed.map((item) => levelOf(item.video)));
-    return [...CEFR_ORDER, OTHER_LEVEL].filter((l) => set.has(l));
-  }, [feed]);
-
   const filtered = useMemo(
     () =>
       feed.filter(
-        (item) =>
-          (typeFilter === 'all' || item.video.type === typeFilter) &&
-          (levelFilter === null || levelOf(item.video) === levelFilter),
+        (item) => typeFilter === 'all' || item.video.type === typeFilter,
       ),
-    [feed, levelFilter, typeFilter],
+    [feed, typeFilter],
   );
-
-  // With no level selected, show the feed grouped into level sections.
-  const sections = useMemo(() => {
-    if (levelFilter !== null) return [{ level: levelFilter, items: filtered }];
-    return presentLevels
-      .map((level) => ({
-        level,
-        items: filtered.filter((item) => levelOf(item.video) === level),
-      }))
-      .filter((s) => s.items.length > 0);
-  }, [filtered, levelFilter, presentLevels]);
 
   if (state === 'loading') {
     return (
@@ -246,19 +219,10 @@ export default function TeacherPage() {
         >
           <div className="max-w-2xl mx-auto px-3 sm:px-6 py-2.5 flex gap-2 overflow-x-auto no-scrollbar">
             <FilterChip
-              label="All levels"
-              active={levelFilter === null}
-              onClick={() => setLevelFilter(null)}
+              label="All"
+              active={typeFilter === 'all'}
+              onClick={() => setTypeFilter('all')}
             />
-            {presentLevels.map((level) => (
-              <FilterChip
-                key={level}
-                label={level}
-                active={levelFilter === level}
-                onClick={() => setLevelFilter(levelFilter === level ? null : level)}
-              />
-            ))}
-            <span className="mx-1 my-auto h-5 w-px flex-shrink-0 bg-paper-300" />
             <FilterChip
               label="Lessons"
               active={typeFilter === 'long'}
@@ -283,24 +247,12 @@ export default function TeacherPage() {
             Nothing matches those filters yet.
           </p>
         ) : (
-          sections.map((section) => (
-            <div key={section.level} className="flex flex-col gap-4">
-              <h2 className="flex items-baseline gap-2 mt-4 first:mt-1">
-                <span className="font-display text-lg font-medium text-ink-900">
-                  {section.level === OTHER_LEVEL ? 'More' : `Level ${section.level}`}
-                </span>
-                <span className="text-sm text-ink-400">
-                  {section.items.length}
-                </span>
-              </h2>
-              {section.items.map((item) => (
-                <VideoCard
-                  key={item.video.id}
-                  video={item.video}
-                  activities={item.activities}
-                />
-              ))}
-            </div>
+          filtered.map((item) => (
+            <VideoCard
+              key={item.video.id}
+              video={item.video}
+              activities={item.activities}
+            />
           ))
         )}
 

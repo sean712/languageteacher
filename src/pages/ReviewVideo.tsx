@@ -112,7 +112,6 @@ export default function ReviewVideo() {
       <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-ink-500">
         <span className="capitalize">{video.status.replace('_', ' ')}</span>
         {video.language && <span>· {video.language}</span>}
-        {video.level && <span>· {video.level}</span>}
         {confidence != null && (
           <span>· AI confidence {Math.round(confidence * 100)}%</span>
         )}
