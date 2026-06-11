@@ -104,6 +104,14 @@ The fundamental product brief is in README.md and in memory
   published + upcoming rows (migration `public_video_metadata_column_grants`).
   Because of this, anon queries must select explicit columns, NOT `*` (a `*`
   select 401s for anon now — see `TeacherPage` published query).
+- **Channel management (2026-06-11).** ChannelManage has **Re-sync** (re-runs
+  `connect-channel` for the teacher's `youtube_channel_id` to discover + queue
+  new uploads) and **Remove channel** (owner-only delete, inline confirm; RLS
+  `owner_can_delete_teacher`; FK cascades wipe videos/activities). Hardening
+  TODO: `connect-channel` reuses an existing teacher by `youtube_channel_id`
+  WITHOUT checking the caller owns it — a logged-in user could trigger a sync
+  on someone else's channel (no data leak, but wasted processing). Add an
+  ownership check before re-sync of an already-owned teacher.
 - **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`, behind
   `RequireAuth`): enter a channel → `connect-channel` indexes it → the page
   polls the public published count to show "N of M lessons ready" as **pg_cron
