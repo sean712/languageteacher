@@ -22,6 +22,10 @@ export default function ChannelManage() {
   const [notProcessed, setNotProcessed] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [resync, setResync] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+  const [resyncMsg, setResyncMsg] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(async (teacherId: string) => {
     const [{ data: vids }, { count: np }] = await Promise.all([
@@ -100,6 +104,42 @@ export default function ChannelManage() {
     }
   };
 
+  // Re-run the catalogue sync to pick up new uploads (reuses connect-channel,
+  // which reuses this teacher and queues newly-discovered videos).
+  const resyncChannel = async () => {
+    if (!teacher?.youtube_channel_id) return;
+    setResync('syncing');
+    setResyncMsg(null);
+    const { data, error } = await supabase.functions.invoke('connect-channel', {
+      body: { channel: teacher.youtube_channel_id },
+    });
+    const res = data as { new_videos?: number; queued_now?: number; error?: string } | null;
+    if (error || res?.error) {
+      setResync('error');
+      setResyncMsg(res?.error ?? 'Sync failed — please try again.');
+      return;
+    }
+    setResync('done');
+    setResyncMsg(
+      res?.new_videos
+        ? `Found ${res.new_videos} new video(s); ${res.queued_now ?? 0} queued.`
+        : 'Up to date — no new videos.',
+    );
+    await refresh(teacher.id);
+  };
+
+  const removeChannel = async () => {
+    if (!teacher) return;
+    setDeleting(true);
+    const { error } = await supabase.from('teachers').delete().eq('id', teacher.id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDelete(false);
+      return;
+    }
+    navigate('/dashboard');
+  };
+
   const counts = useMemo(() => {
     const c = { published: 0, needs_review: 0, working: 0 };
     for (const v of videos) {
@@ -170,7 +210,62 @@ export default function ChannelManage() {
             View public page · /{teacher.slug} ↗
           </Link>
         </div>
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <button
+            type="button"
+            onClick={resyncChannel}
+            disabled={resync === 'syncing'}
+            className="px-3.5 py-2 rounded-lg border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors disabled:opacity-50"
+          >
+            {resync === 'syncing' ? 'Syncing…' : 'Re-sync'}
+          </button>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-ink-400 hover:text-red-700"
+            >
+              Remove channel
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {resyncMsg && (
+        <p
+          className={`mt-2 text-sm ${resync === 'error' ? 'text-red-700' : 'text-ink-500'}`}
+        >
+          {resyncMsg}
+        </p>
+      )}
+
+      {confirmDelete && (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-ink-700">
+            Remove <strong>{teacher.display_name}</strong> and all its generated
+            lessons? This can't be undone. (Your YouTube videos are not
+            affected.)
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={removeChannel}
+              disabled={deleting}
+              className="px-4 py-2 rounded-lg bg-red-600 text-paper-50 text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Removing…' : 'Yes, remove'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              className="px-4 py-2 rounded-lg border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Status communication — this is what the creator was missing. */}
       <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
