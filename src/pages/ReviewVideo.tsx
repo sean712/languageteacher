@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import type { ActivityRow, TeacherRow, VideoRow } from '../lib/database.types';
 import CreatorHeader from '../components/CreatorHeader';
 import VideoCard from '../components/VideoCard';
+import ActivityEditor from '../components/ActivityEditor';
 
 type Load = 'loading' | 'ready' | 'not_found';
 
@@ -18,6 +19,9 @@ export default function ReviewVideo() {
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [transcriptInput, setTranscriptInput] = useState('');
+  const [showTranscriptEditor, setShowTranscriptEditor] = useState(false);
 
   useEffect(() => {
     if (!user || !slug || !videoId) return;
@@ -65,6 +69,34 @@ export default function ReviewVideo() {
     const { error } = await supabase
       .from('videos')
       .update({ status, ...extra })
+      .eq('id', video.id);
+    setBusy(false);
+    if (!error) navigate(`/dashboard/${slug}`);
+  };
+
+  const reloadActivities = async () => {
+    if (!video) return;
+    const { data } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('video_id', video.id);
+    setActivities((data ?? []) as ActivityRow[]);
+    setEditing(false);
+  };
+
+  // Save a teacher-supplied transcript and re-queue. The worker treats an
+  // 'upload' transcript as authoritative and won't refetch (see pipeline.ts).
+  const saveTranscriptAndRegenerate = async () => {
+    if (!video || !transcriptInput.trim()) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from('videos')
+      .update({
+        transcript: transcriptInput.trim(),
+        transcript_source: 'upload',
+        status: 'queued',
+        needs_review_notes: null,
+      })
       .eq('id', video.id);
     setBusy(false);
     if (!error) navigate(`/dashboard/${slug}`);
@@ -119,82 +151,152 @@ export default function ReviewVideo() {
 
       {video.status === 'needs_review' && (
         <p className="mt-4 text-sm text-ink-600 bg-amber-50 border border-amber-100 rounded-xl p-3">
-          This was held back from publishing. Preview what was generated below —
-          if it looks good, publish it; if the source transcript is poor (see
-          below), regenerating won't help much. A teacher-supplied transcript
-          will be the fix once that's built.
+          This was held back from publishing. Preview what was generated below
+          and fix any wording with <strong>Edit text</strong>; if the source
+          transcript is poor (or missing), paste your own and regenerate.
         </p>
       )}
 
-      {/* The authentic learner preview. */}
-      <h2 className="font-display text-lg font-medium mt-7">
-        What learners will see
-      </h2>
-      {hasActivities ? (
+      {/* The authentic learner preview, or the inline text editor. */}
+      <div className="flex items-center justify-between mt-7">
+        <h2 className="font-display text-lg font-medium">
+          {editing ? 'Edit activity text' : 'What learners will see'}
+        </h2>
+        {hasActivities && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+          >
+            Edit text
+          </button>
+        )}
+      </div>
+
+      {editing ? (
         <div className="mt-3">
-          <VideoCard video={video} activities={activities} defaultOpen />
+          <ActivityEditor
+            activities={activities}
+            onSaved={reloadActivities}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      ) : hasActivities ? (
+        <div className="mt-3">
+          <VideoCard
+            key={activities.map((a) => a.id).join(',')}
+            video={video}
+            activities={activities}
+            defaultOpen
+          />
         </div>
       ) : (
         <p className="mt-3 text-sm text-ink-400">
-          No activities were generated for this video.
+          No activities yet — paste a transcript below and regenerate.
         </p>
       )}
 
-      {/* Source transcript — explains low confidence at a glance. */}
-      {video.transcript && (
-        <div className="mt-6">
+      {/* Source transcript — view, and provide/replace your own. */}
+      <div className="mt-6">
+        {video.transcript && (
           <button
             type="button"
             onClick={() => setShowTranscript((s) => !s)}
             className="text-sm font-medium text-ink-600 hover:text-ink-900"
           >
             {showTranscript ? 'Hide' : 'Show'} source transcript
-            <span className="text-ink-400 font-normal">
-              {' '}
-              · {video.transcript_source}
-            </span>
-          </button>
-          {showTranscript && (
-            <p className="mt-2 text-sm text-ink-500 leading-relaxed bg-paper-50 border border-paper-300/70 rounded-xl p-4 max-h-60 overflow-auto whitespace-pre-wrap">
-              {video.transcript}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="mt-8 flex flex-wrap gap-2 border-t border-paper-300/60 pt-5">
-        {video.status !== 'published' && (
-          <button
-            type="button"
-            disabled={busy || !hasActivities}
-            onClick={() =>
-              setStatus('published', { published_at: new Date().toISOString() })
-            }
-            className="px-5 py-2.5 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
-          >
-            Publish
+            <span className="text-ink-400 font-normal"> · {video.transcript_source}</span>
           </button>
         )}
-        {video.status === 'published' && (
+        {showTranscript && video.transcript && (
+          <p className="mt-2 text-sm text-ink-500 leading-relaxed bg-paper-50 border border-paper-300/70 rounded-xl p-4 max-h-60 overflow-auto whitespace-pre-wrap">
+            {video.transcript}
+          </p>
+        )}
+
+        <div className="mt-3">
+          {!showTranscriptEditor ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTranscriptInput(video.transcript ?? '');
+                setShowTranscriptEditor(true);
+              }}
+              className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              {video.transcript ? 'Replace transcript' : 'Provide a transcript'} & regenerate
+            </button>
+          ) : (
+            <div className="rounded-xl border border-paper-300/70 bg-paper-50 p-4">
+              <p className="text-sm font-medium">Your transcript</p>
+              <p className="text-xs text-ink-400 mt-0.5">
+                Paste an accurate transcript in the target language. It's treated
+                as the source of truth, and the lesson is regenerated from it.
+              </p>
+              <textarea
+                value={transcriptInput}
+                onChange={(e) => setTranscriptInput(e.target.value)}
+                rows={8}
+                placeholder="Paste the transcript here…"
+                className="mt-2 w-full rounded-lg border border-paper-300 bg-paper-50 p-3 text-sm resize-y focus:outline-none focus:border-ink-400"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={saveTranscriptAndRegenerate}
+                  disabled={busy || !transcriptInput.trim()}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                >
+                  {busy ? 'Saving…' : 'Save & regenerate'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTranscriptEditor(false)}
+                  className="px-4 py-2 rounded-lg border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      {!editing && (
+        <div className="mt-8 flex flex-wrap gap-2 border-t border-paper-300/60 pt-5">
+          {video.status !== 'published' && (
+            <button
+              type="button"
+              disabled={busy || !hasActivities}
+              onClick={() =>
+                setStatus('published', { published_at: new Date().toISOString() })
+              }
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
+            >
+              Publish
+            </button>
+          )}
+          {video.status === 'published' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setStatus('needs_review')}
+              className="px-5 py-2.5 rounded-xl border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors"
+            >
+              Unpublish
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
-            onClick={() => setStatus('needs_review')}
-            className="px-5 py-2.5 rounded-xl border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors"
+            onClick={() => setStatus('queued')}
+            className="px-5 py-2.5 rounded-xl border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors disabled:opacity-40"
           >
-            Unpublish
+            Regenerate
           </button>
-        )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setStatus('queued')}
-          className="px-5 py-2.5 rounded-xl border border-paper-300 text-sm font-medium text-ink-700 hover:border-ink-400 transition-colors disabled:opacity-40"
-        >
-          Regenerate
-        </button>
-      </div>
+        </div>
+      )}
     </Shell>
   );
 }

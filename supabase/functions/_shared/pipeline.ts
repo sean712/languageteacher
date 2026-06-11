@@ -29,6 +29,8 @@ export interface VideoRow {
   title: string | null;
   duration_seconds: number | null;
   status: string;
+  transcript?: string | null;
+  transcript_source?: string | null;
 }
 
 export interface TeacherRow {
@@ -191,12 +193,18 @@ export async function processVideoRow(args: {
   const { supabase, ai, transcriptProviders, row, pushed } = args;
   const isShort = (row.duration_seconds ?? 0) <= SHORT_DURATION_THRESHOLD;
 
-  // 1. transcript: a pushed one wins; otherwise walk the provider chain.
+  // 1. transcript. Priority: a teacher-uploaded transcript already on the row
+  // (authoritative — never refetch/overwrite it) > a pushed transcript > the
+  // provider chain.
   let transcript = '';
   let transcriptSource: 'captions' | 'whisper' | 'upload' | 'none' = 'none';
   let language: string | undefined;
   let transcriptDiag = '';
-  if (pushed?.text?.trim()) {
+  if (row.transcript_source === 'upload' && row.transcript?.trim()) {
+    transcript = row.transcript.trim();
+    transcriptSource = 'upload';
+    transcriptDiag = 'teacher_upload';
+  } else if (pushed?.text?.trim()) {
     transcript = pushed.text.trim();
     transcriptSource = 'captions';
     language = pushed.language;
