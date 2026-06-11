@@ -89,6 +89,17 @@ The fundamental product brief is in README.md and in memory
   signed-in page a consistent Dashboard / email / Log out bar; the public
   teacher page shows a "Manage channel →" link to the owner; login now lands on
   `/dashboard`.
+- **Teacher transcript + activity editing (2026-06-11).** On the review page a
+  creator can **provide/replace the transcript** (stored `transcript_source=
+  'upload'`, re-queued) — the worker treats an uploaded transcript as
+  authoritative and never refetches it (`processVideoRow` in `pipeline.ts`;
+  process-videos is at **v4**). A clean teacher transcript jumps confidence to
+  ~0.9 and auto-publishes — this is the ToS-clean quality path and the answer
+  to low-resource languages until OAuth/Whisper. They can also **Edit text** of
+  any activity inline (`ActivityEditor`, all 5 types) via the
+  `owner_can_update_activities` RLS policy. ALSO: supadata is hitting its plan
+  **rate limit (429s)** during bulk processing — some needs_review videos are
+  just failed transcript fetches (fix via upload, or raise the supadata plan).
 - **Review a flagged video (2026-06-11).** `/dashboard/:slug/review/:videoId`
   (`src/pages/ReviewVideo.tsx`): previews the generated activities exactly as
   learners see them (reuses `VideoCard` with a new `defaultOpen` prop) and shows
