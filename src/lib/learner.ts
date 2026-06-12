@@ -1,6 +1,75 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
+import { readLocalDone, writeLocalDone } from './progress';
+
+// Activity completion for a lesson. Anonymous → localStorage only. Signed in →
+// loads from the account, merges with anything local, and writes through to the
+// `lesson_progress` table on each completion (cross-device).
+export function useCompleted(videoId: string) {
+  const { user } = useAuth();
+  const [done, setDone] = useState<Set<string>>(() => readLocalDone(videoId));
+
+  useEffect(() => {
+    if (!user) {
+      setDone(readLocalDone(videoId));
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('lesson_progress')
+      .select('done_activities')
+      .eq('user_id', user.id)
+      .eq('video_id', videoId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const server = new Set<string>(
+          ((data?.done_activities as string[] | undefined) ?? []),
+        );
+        const local = readLocalDone(videoId);
+        const union = new Set<string>([...server, ...local]);
+        setDone(union);
+        writeLocalDone(videoId, union);
+        // Push local-only items up so the account catches up.
+        const hasExtra = [...local].some((t) => !server.has(t));
+        if (hasExtra) {
+          supabase.from('lesson_progress').upsert({
+            user_id: user.id,
+            video_id: videoId,
+            done_activities: [...union],
+            updated_at: new Date().toISOString(),
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, videoId]);
+
+  const mark = useCallback(
+    (type: string) => {
+      setDone((prev) => {
+        if (prev.has(type)) return prev;
+        const next = new Set(prev);
+        next.add(type);
+        writeLocalDone(videoId, next);
+        if (user) {
+          supabase.from('lesson_progress').upsert({
+            user_id: user.id,
+            video_id: videoId,
+            done_activities: [...next],
+            updated_at: new Date().toISOString(),
+          });
+        }
+        return next;
+      });
+    },
+    [user, videoId],
+  );
+
+  return [done, mark] as const;
+}
 
 // Learner save/follow state. Anonymous users get a passive false state; the
 // calling component handles the "sign in to save" redirect. Data is owned by

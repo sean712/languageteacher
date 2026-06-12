@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ActivityRow, VideoRow } from '../lib/database.types';
+import { useCompleted } from '../lib/learner';
 import FlashcardDeck from './FlashcardDeck';
 import Quiz from './Quiz';
 import GapFill from './GapFill';
@@ -102,36 +103,6 @@ function countLabel(type: MenuType, count: number): string {
     case 'free_write':
       return 'with AI feedback';
   }
-}
-
-// Per-device completion memory, keyed by video. No auth needed.
-export function useCompleted(videoId: string) {
-  const key = `lingua:done:${videoId}`;
-  const [done, setDone] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-    } catch {
-      return new Set();
-    }
-  });
-  const mark = useCallback(
-    (type: string) => {
-      setDone((prev) => {
-        if (prev.has(type)) return prev;
-        const next = new Set(prev);
-        next.add(type);
-        try {
-          localStorage.setItem(key, JSON.stringify([...next]));
-        } catch {
-          /* ignore quota / private-mode errors */
-        }
-        return next;
-      });
-    },
-    [key],
-  );
-  return [done, mark] as const;
 }
 
 // The activity engine: a picker that opens one activity at a time in a focused

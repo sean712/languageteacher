@@ -1,5 +1,6 @@
 import type { ActivityRow, VideoRow } from '../lib/database.types';
-import { parseActivities, useCompleted } from './LessonActivities';
+import { parseActivities } from './LessonActivities';
+import { useCompleted } from '../lib/learner';
 
 // A browsable lesson tile for the grid: thumbnail on top, title + meta below.
 // Vertical layout works well in a multi-column grid on wider screens.
