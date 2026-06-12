@@ -9,6 +9,7 @@ import {
   type AIProvider,
   type ActivityGenInput,
   type DetectResult,
+  type LessonChatInput,
   type SentenceFeedback,
   type SentenceFeedbackInput,
 } from './ai-types.ts';
@@ -36,6 +37,12 @@ export class AnthropicProvider implements AIProvider {
   evaluateSentence(_input: SentenceFeedbackInput): Promise<SentenceFeedback> {
     throw new AIProviderError(
       'AnthropicProvider.evaluateSentence is not implemented yet. Set AI_PROVIDER=openai or implement this method.',
+    );
+  }
+
+  chatAboutLesson(_input: LessonChatInput): Promise<string> {
+    throw new AIProviderError(
+      'AnthropicProvider.chatAboutLesson is not implemented yet. Set AI_PROVIDER=openai or implement this method.',
     );
   }
 }

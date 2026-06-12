@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { ActivityRow, VideoRow } from '../lib/database.types';
 import { useCompleted } from '../lib/learner';
+import { useAuth } from '../lib/auth';
 import FlashcardDeck from './FlashcardDeck';
 import Quiz from './Quiz';
 import GapFill from './GapFill';
 import Matching from './Matching';
 import QuickPractice from './QuickPractice';
 import FreeWrite from './FreeWrite';
+import LessonChat from './LessonChat';
 import {
   ActivitySchemas,
   type ActivityType,
@@ -115,7 +118,11 @@ export default function LessonActivities({
   activities: ActivityRow[];
 }) {
   const [selected, setSelected] = useState<MenuType | null>(null);
+  const [chatting, setChatting] = useState(false);
   const [completed, markComplete] = useCompleted(video.id);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const parsed = useMemo(() => parseActivities(activities), [activities]);
   const doneCount = parsed.filter((p) => completed.has(p.type)).length;
@@ -126,11 +133,35 @@ export default function LessonActivities({
     : null;
   const nextUp = parsed.find((p) => p.type !== selected && !completed.has(p.type));
 
+  // AI chat is account-gated (the premium feature). Anonymous → sign in.
+  const onChat = () => {
+    if (!user) {
+      navigate('/login', { state: { from: location.pathname + location.search } });
+      return;
+    }
+    setChatting(true);
+  };
+
   if (parsed.length === 0) {
     return (
       <p className="text-sm text-ink-400">
         No activities generated for this lesson yet.
       </p>
+    );
+  }
+
+  if (chatting) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setChatting(false)}
+          className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900 transition-colors mb-4"
+        >
+          <span aria-hidden>←</span> Activities
+        </button>
+        <LessonChat videoId={video.id} language={video.language} />
+      </div>
     );
   }
 
@@ -151,6 +182,7 @@ export default function LessonActivities({
       doneCount={doneCount}
       allDone={allDone}
       onPick={setSelected}
+      onChat={onChat}
     />
   );
 }
@@ -161,12 +193,14 @@ function ActivityMenu({
   doneCount,
   allDone,
   onPick,
+  onChat,
 }: {
   parsed: ParsedActivity[];
   completed: Set<string>;
   doneCount: number;
   allDone: boolean;
   onPick: (t: MenuType) => void;
+  onChat: () => void;
 }) {
   return (
     <div>
@@ -214,6 +248,31 @@ function ActivityMenu({
             </button>
           );
         })}
+
+        {/* AI tutor — the premium capstone. */}
+        <button
+          type="button"
+          onClick={onChat}
+          className="group flex items-center gap-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-left hover:border-emerald-400 hover:bg-emerald-50 transition-colors"
+        >
+          <span className="flex-shrink-0 w-10 h-10 rounded-lg grid place-items-center bg-emerald-600 text-paper-50">
+            ✦
+          </span>
+          <span className="min-w-0">
+            <span className="block font-medium leading-tight">
+              Ask the AI tutor
+            </span>
+            <span className="block text-xs text-ink-400 mt-0.5">
+              Chat about this lesson · anything you’re unsure about
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className="ml-auto text-ink-400 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-all"
+          >
+            →
+          </span>
+        </button>
       </div>
     </div>
   );

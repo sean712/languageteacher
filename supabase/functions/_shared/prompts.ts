@@ -1,10 +1,29 @@
 // Provider-agnostic prompts. Only the transport (OpenAI vs Anthropic API shape)
 // differs per provider — the prompt strings themselves live here.
 import { SCHEMA_VERSION } from './schemas.ts';
-import type { ActivityGenInput, SentenceFeedbackInput } from './ai-types.ts';
+import type {
+  ActivityGenInput,
+  LessonChatInput,
+  SentenceFeedbackInput,
+} from './ai-types.ts';
 
 const TRANSCRIPT_CAP = 18_000;
 const SENTENCE_CAP = 600;
+const CHAT_TRANSCRIPT_CAP = 8_000;
+
+// System prompt for the lesson-chat tutor. The conversation messages are
+// appended after this by the provider.
+export function lessonChatSystemPrompt(input: LessonChatInput): string {
+  const level = input.level ? ` (around CEFR ${input.level})` : '';
+  return `You are a warm, encouraging ${input.language} tutor helping a learner${level} understand ONE specific short video lesson. Be concise, friendly and practical.
+
+What you help with: vocabulary, grammar, pronunciation tips, meaning, natural usage, and example sentences — all grounded in THIS lesson. When you use ${input.language}, give a short English gloss. If the learner asks something unrelated to the lesson or to learning ${input.language}, gently steer back. Don't invent facts that aren't supported by the lesson; if the transcript is unclear, say so. Keep replies to a few sentences unless asked for more.
+
+=== LESSON ===
+Title: ${input.title ?? '(untitled)'}
+Transcript (auto-generated — may contain errors):
+${input.transcript.slice(0, CHAT_TRANSCRIPT_CAP)}`;
+}
 
 export function sentenceFeedbackPrompt(input: SentenceFeedbackInput): {
   system: string;

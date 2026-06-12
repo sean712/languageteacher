@@ -4,6 +4,7 @@ import {
   type AIProvider,
   type ActivityGenInput,
   type DetectResult,
+  type LessonChatInput,
   type SentenceFeedback,
   type SentenceFeedbackInput,
 } from './ai-types.ts';
@@ -15,6 +16,7 @@ import {
 import {
   activityGenerationPrompt,
   detectLanguageAndLevelPrompt,
+  lessonChatSystemPrompt,
   sentenceFeedbackPrompt,
 } from './prompts.ts';
 
@@ -96,6 +98,23 @@ export class OpenAIProvider implements AIProvider {
   async generateActivities(input: ActivityGenInput): Promise<ActivityBundle> {
     const { system, user } = activityGenerationPrompt(input);
     return await this.callAndParse(system, user, /* retry */ true);
+  }
+
+  async chatAboutLesson(input: LessonChatInput): Promise<string> {
+    try {
+      const resp = await this.client.responses.create({
+        model: this.model,
+        reasoning: { effort: 'low' },
+        input: [
+          { role: 'system', content: lessonChatSystemPrompt(input) },
+          ...input.messages.map((m) => ({ role: m.role, content: m.content })),
+        ],
+      });
+      return (resp.output_text ?? '').trim() ||
+        'Sorry, I didn’t catch that — could you rephrase?';
+    } catch (e) {
+      throw new AIProviderError('lesson chat: Responses API call failed', e, true);
+    }
   }
 
   // --- Responses API helpers ---

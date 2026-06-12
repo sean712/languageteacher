@@ -34,11 +34,26 @@ export interface SentenceFeedback {
   correction?: string;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// A learner chatting with an AI tutor about one specific lesson.
+export interface LessonChatInput {
+  language: string;
+  title?: string;
+  level?: string;
+  transcript: string;
+  messages: ChatMessage[];
+}
+
 export interface AIProvider {
   readonly name: string;
   detectLanguageAndLevel(text: string): Promise<DetectResult>;
   generateActivities(input: ActivityGenInput): Promise<ActivityBundle>;
   evaluateSentence(input: SentenceFeedbackInput): Promise<SentenceFeedback>;
+  chatAboutLesson(input: LessonChatInput): Promise<string>;
 }
 
 export class AIProviderError extends Error {
