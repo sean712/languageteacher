@@ -89,6 +89,17 @@ The fundamental product brief is in README.md and in memory
   signed-in page a consistent Dashboard / email / Log out bar; the public
   teacher page shows a "Manage channel →" link to the owner; login now lands on
   `/dashboard`.
+- **AI model + API (2026-06-12).** All OpenAI calls go through `OpenAIProvider`
+  on the **Responses API** (`client.responses.create`), model **`gpt-5-mini`**
+  (override via `OPENAI_MODEL` secret). Detection + sentence feedback use strict
+  `json_schema` Structured Outputs (no repair retry needed); activity generation
+  uses `json_object` + Zod validation + one retry (its discriminated-union schema
+  isn't worth dual-maintaining as strict JSON Schema). `reasoning.effort:'low'`
+  on all calls. gpt-5-mini is a reasoning model → ~18s/video (vs ~2s on
+  gpt-4o-mini); a batch of 5 ≈ 90s (fine, <400s Edge limit) but **watch
+  throughput + cost on deep queues** since pg_cron fires process-videos every
+  minute and overlaps are allowed (safe via SKIP LOCKED, but more concurrency).
+  Quality is notably better (French upload test: 0.95 conf, 5 valid activities).
 - **Teacher transcript + activity editing (2026-06-11).** On the review page a
   creator can **provide/replace the transcript** (stored `transcript_source=
   'upload'`, re-queued) — the worker treats an uploaded transcript as
