@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import CreatorHeader from '../components/CreatorHeader';
@@ -12,251 +12,473 @@ interface ConnectResult {
   queue_depth: number;
 }
 
-type Phase = 'form' | 'connecting' | 'processing' | 'done' | 'error';
+interface PreviewVideo {
+  id: string;
+  title: string | null;
+  thumbnail_url: string | null;
+  status: string;
+}
 
-const POLL_MS = 5000;
-const MAX_POLLS = 48; // ~4 minutes
+type Phase = 'form' | 'reveal' | 'error';
+type Stage = 'finding' | 'importing' | 'creating' | 'done';
+
+const CATEGORIES = [
+  { id: 'language', label: 'Language learning', icon: '🗣️', live: true },
+  { id: 'music', label: 'Music', icon: '🎵' },
+  { id: 'coding', label: 'Coding & tech', icon: '💻' },
+  { id: 'cooking', label: 'Cooking', icon: '🍳' },
+  { id: 'fitness', label: 'Fitness', icon: '🏋️' },
+  { id: 'academic', label: 'Academic', icon: '📚' },
+  { id: 'business', label: 'Business', icon: '💼' },
+  { id: 'other', label: 'Something else', icon: '✨' },
+] as const;
+
+const AUDIENCES = [
+  { id: 'beginners', label: 'Beginners' },
+  { id: 'intermediate', label: 'Improvers' },
+  { id: 'advanced', label: 'Advanced' },
+  { id: 'all', label: 'All levels' },
+] as const;
+
+const STAGES: { id: Stage; label: string }[] = [
+  { id: 'finding', label: 'Finding' },
+  { id: 'importing', label: 'Importing' },
+  { id: 'creating', label: 'Creating' },
+];
+
+const POLL_MS = 4000;
+const MAX_POLLS = 90; // ~6 minutes
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function Connect() {
   const navigate = useNavigate();
   const [channel, setChannel] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [audience, setAudience] = useState<string | null>(null);
+
   const [phase, setPhase] = useState<Phase>('form');
+  const [stage, setStage] = useState<Stage>('finding');
   const [error, setError] = useState<string | null>(null);
+
   const [result, setResult] = useState<ConnectResult | null>(null);
-  const [built, setBuilt] = useState(0);
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [videos, setVideos] = useState<PreviewVideo[]>([]);
   const cancelled = useRef(false);
 
-  const target = result?.queue_depth ?? 0;
+  useEffect(() => () => { cancelled.current = true; }, []);
 
-  const publishedCount = async (teacherId: string) => {
-    const { count } = await supabase
+  const target = result?.queue_depth ?? 0;
+  const ready = videos.filter((v) => v.status === 'published').length;
+
+  const loadVideos = async (teacherId: string) => {
+    const { data } = await supabase
       .from('videos')
-      .select('id', { count: 'exact', head: true })
+      .select('id,title,thumbnail_url,status')
       .eq('teacher_id', teacherId)
-      .eq('status', 'published');
-    return count ?? 0;
+      .in('status', ['queued', 'processing', 'published', 'needs_review', 'failed'])
+      .order('youtube_published_at', { ascending: false, nullsFirst: false })
+      .limit(24);
+    return (data ?? []) as PreviewVideo[];
   };
 
   const run = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!channel.trim()) return;
+    if (!channel.trim() || !category || !audience) return;
     cancelled.current = false;
-    setPhase('connecting');
     setError(null);
-    setBuilt(0);
+    setPhase('reveal');
+    setStage('finding');
 
-    // 1. Resolve + create teacher + index catalogue (queues the latest videos).
-    //    The user's JWT is attached automatically by supabase-js.
-    const { data, error: connErr } = await supabase.functions.invoke(
-      'connect-channel',
-      { body: { channel: channel.trim(), display_name: displayName.trim() || undefined } },
-    );
+    // Stage 1 — find the channel (real resolve + index happens here).
+    const { data, error: connErr } = await supabase.functions.invoke('connect-channel', {
+      body: { channel: channel.trim(), display_name: displayName.trim() || undefined },
+    });
+    if (cancelled.current) return;
     const res = data as (ConnectResult & { error?: string }) | null;
     if (connErr || !res || res.error) {
+      setError(res?.error ?? 'We couldn’t find that channel. Try the @handle or full URL.');
       setPhase('error');
-      setError(res?.error ?? 'Could not connect that channel. Check the ID or @handle.');
       return;
     }
     setResult(res);
 
+    // Persist category + audience (owner update via RLS); fetch the avatar.
+    await supabase
+      .from('teachers')
+      .update({ category, target_audience: { level: audience } })
+      .eq('id', res.teacher_id);
+    const { data: t } = await supabase
+      .from('teachers')
+      .select('avatar_url')
+      .eq('id', res.teacher_id)
+      .maybeSingle();
+    if (cancelled.current) return;
+    setAvatar((t as { avatar_url: string | null } | null)?.avatar_url ?? null);
+
+    // Let the "found" reveal land before moving on.
+    await sleep(1600);
+    if (cancelled.current) return;
+
+    // Stage 2 — import: show the real thumbnails cascading in.
+    setStage('importing');
+    setVideos(await loadVideos(res.teacher_id));
+    await sleep(2200);
+    if (cancelled.current) return;
+
+    // Stage 3 — create: poll as the cron worker publishes lessons.
+    setStage('creating');
     if (res.queue_depth === 0) {
-      setPhase('done');
+      setStage('done');
       return;
     }
-
-    // 2. Lessons are built by the cron worker. Watch them appear by polling the
-    //    public published count — no client-side processing, no open endpoints.
-    setPhase('processing');
-    const baseline = await publishedCount(res.teacher_id);
     for (let i = 0; i < MAX_POLLS && !cancelled.current; i++) {
-      await new Promise((r) => setTimeout(r, POLL_MS));
+      await sleep(POLL_MS);
       if (cancelled.current) return;
-      const now = await publishedCount(res.teacher_id);
-      const done = Math.min(Math.max(now - baseline, 0), res.queue_depth);
-      setBuilt(done);
-      if (done >= res.queue_depth) break;
+      const vids = await loadVideos(res.teacher_id);
+      setVideos(vids);
+      const terminal = vids.filter((v) =>
+        ['published', 'needs_review', 'failed'].includes(v.status),
+      ).length;
+      if (terminal >= res.queue_depth) break;
     }
-    if (!cancelled.current) setPhase('done');
+    if (!cancelled.current) setStage('done');
   };
 
   const goToPage = () => result && navigate(`/${result.teacher_slug}`);
+  const goToDashboard = () => result && navigate(`/dashboard/${result.teacher_slug}`);
 
   return (
-    <main className="min-h-dvh bg-paper-100 text-ink-900">
+    <main className="min-h-dvh bg-paper-100 text-ink-900 overflow-x-clip">
       <CreatorHeader />
-
-      <section className="max-w-2xl mx-auto px-5 sm:px-8 pt-8 sm:pt-14 pb-20">
-        <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
-          Connect a channel
-        </span>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight mt-3">
-          Turn a YouTube channel into lessons.
-        </h1>
-        <p className="text-ink-500 mt-3 leading-relaxed">
-          Paste a channel ID, URL or @handle. Lingua imports the catalogue and
-          builds activities from the most recent videos.
-        </p>
-
-        {(phase === 'form' || phase === 'error') && (
-          <form onSubmit={run} className="mt-8 flex flex-col gap-4">
-            <label className="block">
-              <span className="text-sm font-medium">YouTube channel</span>
-              <input
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                placeholder="@handle or youtube.com/@handle"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
-              />
-              <span className="block text-xs text-ink-400 mt-1.5">
-                Best to use the channel's @handle or URL — a name can match the
-                wrong channel, and a pasted ID might be a featured channel.
-              </span>
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium">
-                Display name{' '}
-                <span className="text-ink-400 font-normal">(optional)</span>
-              </span>
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Defaults to the channel name"
-                className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
-              />
-            </label>
-
-            {phase === 'error' && error && (
-              <p className="text-sm text-red-700">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={!channel.trim()}
-              className="mt-1 inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
-            >
-              Connect channel
-            </button>
-            <p className="text-xs text-ink-400">
-              Testing tip: try{' '}
-              <button
-                type="button"
-                onClick={() => setChannel('UCK8WMyvZ1sFlhxie5tlaIdQ')}
-                className="text-emerald-600 underline underline-offset-2"
-              >
-                the Welsh demo channel
-              </button>
-              .
-            </p>
-          </form>
-        )}
-
-        {phase === 'connecting' && (
-          <StatusCard title="Importing the catalogue…">
-            <Spinner />
-            <p className="text-sm text-ink-500 mt-3">
-              Reading the channel and indexing its videos.
-            </p>
-          </StatusCard>
-        )}
-
-        {phase === 'processing' && result && (
-          <StatusCard title={`Building lessons from ${result.channel_title}`}>
-            <p className="text-sm text-ink-500">
-              Indexed {result.channel_video_count} videos. Generating activities
-              for the latest {target}…
-            </p>
-            <Progress value={built} max={target} />
-            <p className="text-sm text-ink-700 mt-2">
-              {built} of {target} lessons ready
-            </p>
-            {built > 0 && (
-              <button
-                type="button"
-                onClick={goToPage}
-                className="mt-4 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-              >
-                View the page now →
-              </button>
-            )}
-          </StatusCard>
-        )}
-
-        {phase === 'done' && result && (
-          <StatusCard title="Your channel is connected 🎉">
-            <p className="text-sm text-ink-500">
-              {result.channel_video_count} videos indexed
-              {target > 0 ? `, ${built} of ${target} lessons ready` : ''}. Any
-              still generating will appear shortly — new uploads are added
-              automatically.
-            </p>
-            <div className="mt-5 flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                onClick={goToPage}
-                className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors"
-              >
-                View your page →
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPhase('form');
-                  setChannel('');
-                  setDisplayName('');
-                  setResult(null);
-                }}
-                className="inline-flex items-center justify-center px-5 py-3 rounded-xl border border-paper-300 font-medium text-ink-700 hover:border-ink-400 transition-colors"
-              >
-                Connect another
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate(`/dashboard/${result.teacher_slug}`)}
-              className="mt-3 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-            >
-              Manage this channel in your dashboard →
-            </button>
-          </StatusCard>
+      <section className="max-w-2xl mx-auto px-5 sm:px-8 pt-8 sm:pt-12 pb-24">
+        {phase === 'form' || phase === 'error' ? (
+          <ConnectForm
+            channel={channel}
+            setChannel={setChannel}
+            displayName={displayName}
+            setDisplayName={setDisplayName}
+            category={category}
+            setCategory={setCategory}
+            audience={audience}
+            setAudience={setAudience}
+            error={phase === 'error' ? error : null}
+            onSubmit={run}
+          />
+        ) : (
+          <Reveal
+            stage={stage}
+            result={result}
+            avatar={avatar}
+            videos={videos}
+            target={target}
+            ready={ready}
+            categoryLabel={CATEGORIES.find((c) => c.id === category)?.label ?? ''}
+            onViewPage={goToPage}
+            onDashboard={goToDashboard}
+          />
         )}
       </section>
     </main>
   );
 }
 
-function StatusCard({
-  title,
-  children,
+function ConnectForm({
+  channel, setChannel, displayName, setDisplayName,
+  category, setCategory, audience, setAudience, error, onSubmit,
 }: {
-  title: string;
-  children: ReactNode;
+  channel: string; setChannel: (v: string) => void;
+  displayName: string; setDisplayName: (v: string) => void;
+  category: string | null; setCategory: (v: string) => void;
+  audience: string | null; setAudience: (v: string) => void;
+  error: string | null;
+  onSubmit: (e: React.FormEvent) => void;
 }) {
+  const ready = channel.trim() && category && audience;
   return (
-    <div className="mt-8 rounded-2xl border border-paper-300/70 bg-paper-50 p-6">
-      <h2 className="font-display text-xl font-medium">{title}</h2>
-      <div className="mt-3">{children}</div>
+    <form onSubmit={onSubmit}>
+      <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
+        Connect a channel
+      </span>
+      <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight mt-3">
+        Let’s bring your channel to life.
+      </h1>
+      <p className="text-ink-500 mt-3 leading-relaxed">
+        Tell us a little about it, then watch Lingua turn your videos into
+        interactive lessons — automatically.
+      </p>
+
+      <label className="block mt-8">
+        <span className="text-sm font-medium">YouTube channel</span>
+        <input
+          value={channel}
+          onChange={(e) => setChannel(e.target.value)}
+          placeholder="@handle or youtube.com/@handle"
+          autoCapitalize="off" autoCorrect="off" spellCheck={false}
+          className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
+        />
+        <span className="block text-xs text-ink-400 mt-1.5">
+          Use the channel’s @handle or URL — a name can match the wrong channel.
+        </span>
+      </label>
+
+      <fieldset className="mt-6">
+        <legend className="text-sm font-medium">What’s your channel about?</legend>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+          {CATEGORIES.map((c) => (
+            <button
+              type="button"
+              key={c.id}
+              onClick={() => setCategory(c.id)}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                category === c.id
+                  ? 'border-emerald-500 bg-emerald-50'
+                  : 'border-paper-300 bg-paper-50 hover:border-ink-400'
+              }`}
+            >
+              <span className="text-xl">{c.icon}</span>
+              <span className="block text-sm font-medium mt-1 leading-tight">{c.label}</span>
+              {!('live' in c) && (
+                <span className="block text-[10px] text-ink-400 mt-0.5">More soon</span>
+              )}
+            </button>
+          ))}
+        </div>
+        {category && category !== 'language' && (
+          <p className="text-xs text-ink-500 mt-2">
+            We’re starting with language learning — tailored lesson types for this
+            category are coming soon, and we’ll set you up first.
+          </p>
+        )}
+      </fieldset>
+
+      <fieldset className="mt-6">
+        <legend className="text-sm font-medium">Who’s it for?</legend>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {AUDIENCES.map((a) => (
+            <button
+              type="button"
+              key={a.id}
+              onClick={() => setAudience(a.id)}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                audience === a.id
+                  ? 'border-ink-900 bg-ink-900 text-paper-50'
+                  : 'border-paper-300 bg-paper-50 text-ink-700 hover:border-ink-400'
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <label className="block mt-6">
+        <span className="text-sm font-medium">
+          Display name <span className="text-ink-400 font-normal">(optional)</span>
+        </span>
+        <input
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder="Defaults to the channel name"
+          className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
+        />
+      </label>
+
+      {error && <p className="text-sm text-red-700 mt-5">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={!ready}
+        className="mt-7 w-full sm:w-auto inline-flex items-center justify-center px-7 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
+      >
+        ✨ Bring it to life
+      </button>
+      <p className="text-xs text-ink-400 mt-3">
+        Testing tip: try{' '}
+        <button
+          type="button"
+          onClick={() => setChannel('UCK8WMyvZ1sFlhxie5tlaIdQ')}
+          className="text-emerald-600 underline underline-offset-2"
+        >
+          the Welsh demo channel
+        </button>
+        .
+      </p>
+    </form>
+  );
+}
+
+function Reveal({
+  stage, result, avatar, videos, target, ready, categoryLabel, onViewPage, onDashboard,
+}: {
+  stage: Stage;
+  result: ConnectResult | null;
+  avatar: string | null;
+  videos: PreviewVideo[];
+  target: number;
+  ready: number;
+  categoryLabel: string;
+  onViewPage: () => void;
+  onDashboard: () => void;
+}) {
+  const stageIndex = stage === 'done' ? 3 : STAGES.findIndex((s) => s.id === stage);
+
+  return (
+    <div>
+      {/* Stepper */}
+      <div className="flex items-center gap-2">
+        {STAGES.map((s, i) => {
+          const done = i < stageIndex;
+          const active = i === stageIndex;
+          return (
+            <div key={s.id} className="flex items-center gap-2 flex-1 last:flex-none">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-6 h-6 rounded-full grid place-items-center text-xs font-medium transition-colors ${
+                    done
+                      ? 'bg-emerald-500 text-paper-50'
+                      : active
+                      ? 'bg-ink-900 text-paper-50'
+                      : 'bg-paper-200 text-ink-400'
+                  }`}
+                >
+                  {done ? '✓' : i + 1}
+                </span>
+                <span className={`text-xs ${active || done ? 'text-ink-900' : 'text-ink-400'}`}>
+                  {s.label}
+                </span>
+              </div>
+              {i < STAGES.length - 1 && (
+                <span className={`h-px flex-1 ${done ? 'bg-emerald-400' : 'bg-paper-300'}`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Finding */}
+      {stage === 'finding' && !result && (
+        <div className="mt-12 flex flex-col items-center text-center">
+          <span className="w-12 h-12 rounded-full border-2 border-paper-300 border-t-emerald-600 animate-spin" />
+          <h2 className="font-display text-2xl font-semibold mt-6">Finding your channel…</h2>
+          <p className="text-ink-500 mt-1 text-sm">Searching YouTube and reading your library.</p>
+        </div>
+      )}
+
+      {/* Found channel card — persists from 'finding' onward once resolved */}
+      {result && (
+        <div className="mt-8 rounded-2xl border border-paper-300/70 bg-paper-50 p-5 flex items-center gap-4 animate-rise">
+          {avatar ? (
+            <img src={avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-1 ring-paper-300" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-emerald-50 ring-1 ring-emerald-100 grid place-items-center font-display text-2xl text-emerald-600">
+              {result.channel_title[0]?.toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-600 text-sm">✓ Found</span>
+            </div>
+            <h2 className="font-display text-xl font-semibold truncate">{result.channel_title}</h2>
+            <p className="text-sm text-ink-500">
+              {result.channel_video_count} videos
+              {categoryLabel ? ` · ${categoryLabel}` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Importing / Creating header */}
+      {result && stage !== 'finding' && (
+        <div className="mt-8">
+          <h3 className="font-display text-xl font-medium">
+            {stage === 'importing'
+              ? 'Importing your library…'
+              : stage === 'creating'
+              ? 'Creating your lessons…'
+              : '✨ Your space is live'}
+          </h3>
+          <p className="text-sm text-ink-500 mt-1">
+            {stage === 'importing'
+              ? `Pulling in ${result.channel_video_count} videos.`
+              : stage === 'creating'
+              ? `Turning the latest ${target} into interactive lessons. You can explore as they appear.`
+              : `${ready} lesson${ready === 1 ? '' : 's'} ready${
+                  ready < target ? `, ${target - ready} still cooking` : ''
+                }. New uploads are added automatically.`}
+          </p>
+
+          {(stage === 'creating' || stage === 'done') && target > 0 && (
+            <div className="mt-3">
+              <div className="h-2 rounded-full bg-paper-200 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-700"
+                  style={{ width: `${Math.round((ready / target) * 100)}%` }}
+                />
+              </div>
+              <p className="text-sm text-ink-700 mt-2">{ready} of {target} lessons ready</p>
+            </div>
+          )}
+
+          {/* Thumbnail grid */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mt-5">
+            {videos.map((v, i) => (
+              <ThumbTile key={v.id} video={v} index={i} />
+            ))}
+          </div>
+
+          {/* CTAs — available throughout creating, prominent when done */}
+          <div className="mt-7 flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={onViewPage}
+              className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors"
+            >
+              View your page →
+            </button>
+            <button
+              type="button"
+              onClick={onDashboard}
+              className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl border border-paper-300 font-medium text-ink-700 hover:border-ink-400 transition-colors"
+            >
+              Go to dashboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Progress({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+function ThumbTile({ video, index }: { video: PreviewVideo; index: number }) {
+  const ready = video.status === 'published';
+  const attention = video.status === 'needs_review' || video.status === 'failed';
+  const working = !ready && !attention;
   return (
-    <div className="mt-3 h-2 rounded-full bg-paper-200 overflow-hidden">
-      <div
-        className="h-full bg-emerald-500 transition-all duration-500"
-        style={{ width: `${pct}%` }}
-      />
+    <div
+      className={`relative aspect-video rounded-lg overflow-hidden bg-paper-200 animate-rise ${
+        ready ? 'ring-2 ring-emerald-500' : ''
+      }`}
+      style={{ animationDelay: `${Math.min(index * 60, 900)}ms` }}
+    >
+      {video.thumbnail_url && (
+        <img
+          src={video.thumbnail_url}
+          alt=""
+          className={`w-full h-full object-cover transition-opacity duration-500 ${
+            working ? 'opacity-50' : 'opacity-100'
+          }`}
+        />
+      )}
+      {working && <div className="absolute inset-0 animate-pulse bg-ink-900/10" />}
+      {ready && (
+        <span className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-emerald-500 text-paper-50 grid place-items-center text-[11px] animate-pop">
+          ✓
+        </span>
+      )}
+      {attention && (
+        <span className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-paper-50" />
+      )}
     </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <span className="inline-block w-6 h-6 rounded-full border-2 border-paper-300 border-t-emerald-600 animate-spin" />
   );
 }

@@ -26,6 +26,8 @@ export interface TeacherRow {
   avatar_url: string | null;
   youtube_channel_id: string | null;
   branding: Record<string, unknown>;
+  category: string | null;
+  target_audience: Record<string, unknown>;
   uploads_playlist_id: string | null;
   last_synced_at: string | null;
   created_at: string;
