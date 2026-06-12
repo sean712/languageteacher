@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import HeroAnimation from '../components/HeroAnimation';
 
 export default function Home() {
   return (
@@ -104,92 +105,10 @@ function Hero() {
         </div>
 
         <div className="animate-rise" style={{ animationDelay: '160ms' }}>
-          <HeroVisual />
+          <HeroAnimation />
         </div>
       </div>
     </section>
-  );
-}
-
-// A static "proof" mockup: one video on the left transforming into the
-// activities Lingua generates from it. Purely decorative.
-function HeroVisual() {
-  return (
-    <div className="relative">
-      <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-50/60 to-transparent rounded-[2rem] -z-10" />
-      <div className="rounded-2xl bg-paper-50 border border-paper-300/70 shadow-[0_1px_0_rgba(0,0,0,0.02),0_18px_40px_-18px_rgba(26,25,22,0.25)] p-4 sm:p-5">
-        {/* source video */}
-        <div className="flex gap-3 items-center">
-          <div className="relative w-28 h-[4.5rem] rounded-lg bg-ink-900 overflow-hidden flex-shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-700/40 to-ink-900" />
-            <span className="absolute inset-0 grid place-items-center text-paper-50/90">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-ink-900 leading-snug">
-              Welsh greetings — your first 6 phrases
-            </p>
-            <p className="text-xs text-ink-400 mt-1">YouTube · 4:02</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 my-4">
-          <span className="h-px flex-1 bg-paper-300/80" />
-          <span className="text-[11px] uppercase tracking-wider text-ink-400">
-            Lingua generates
-          </span>
-          <span className="h-px flex-1 bg-paper-300/80" />
-        </div>
-
-        {/* generated flashcard */}
-        <div className="rounded-xl border border-paper-300/70 bg-paper-50 p-4">
-          <div className="flex items-center justify-between text-[11px] text-ink-400 mb-2">
-            <span>Flashcards</span>
-            <span>1 / 12</span>
-          </div>
-          <div className="font-display text-2xl font-medium text-center py-3">
-            Bore da
-          </div>
-          <div className="text-center text-sm text-ink-500">Good morning</div>
-        </div>
-
-        {/* generated quiz */}
-        <div className="rounded-xl border border-paper-300/70 bg-paper-50 p-4 mt-3">
-          <p className="text-sm font-medium mb-2.5">
-            How do you say “thank you”?
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <Option>Diolch</Option>
-            <Option dim>Croeso</Option>
-            <Option dim>Nos da</Option>
-            <Option dim>Hwyl</Option>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Option({
-  children,
-  dim,
-}: {
-  children: React.ReactNode;
-  dim?: boolean;
-}) {
-  return (
-    <span
-      className={`rounded-lg border px-3 py-2 ${
-        dim
-          ? 'border-paper-300/70 text-ink-500'
-          : 'border-emerald-500 bg-emerald-50 text-emerald-700 font-medium'
-      }`}
-    >
-      {children}
-    </span>
   );
 }
 
