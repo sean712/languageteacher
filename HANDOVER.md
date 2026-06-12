@@ -134,6 +134,18 @@ The fundamental product brief is in README.md and in memory
   WITHOUT checking the caller owns it — a logged-in user could trigger a sync
   on someone else's channel (no data leak, but wasted processing). Add an
   ownership check before re-sync of an already-owned teacher.
+- **Onboarding reveal (2026-06-12).** `/connect` is a two-part wizard: a form
+  (channel + **category** picker + **target-audience** level) then a staged
+  "magical" reveal — Finding (channel "Found" card) → Importing (real
+  thumbnails cascade in) → Creating (live progress; thumbnails get an emerald
+  ring/check as each lesson publishes, amber dot for needs_review), driven by
+  real connect + polling the videos table. Category/audience save to
+  `teachers.category` + `teachers.target_audience` (new columns, owner-write
+  RLS) — collected now, **used later** for non-language activity types +
+  audience-tuned generation (categories other than `language` are selectable
+  but marked "more soon"; the pipeline still generates language-style
+  activities for them today). Reveal keyframes (`animate-rise/pop/glow`) in
+  index.css, reduced-motion safe.
 - **Creator onboarding** lives at `/connect` (`src/pages/Connect.tsx`, behind
   `RequireAuth`): enter a channel → `connect-channel` indexes it → the page
   polls the public published count to show "N of M lessons ready" as **pg_cron
