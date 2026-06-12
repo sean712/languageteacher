@@ -328,6 +328,18 @@ rewrites. **Sean still needs to**: set `VITE_SUPABASE_URL` +
 Vercel URL to Supabase Auth Redirect URLs + Site URL (see README). Values are
 in local `.env.local`.
 
+## Future / parked ideas
+
+- **Remotion marketing video.** Sean chose a native in-page hero animation
+  (`src/components/HeroAnimation.tsx`, the looping Connect→Import→Create story)
+  for the landing page, and parked a **Remotion-rendered "How Lingua works"
+  video** as a separate future asset for social/launch. Skills exist if/when
+  wanted: `remotion-dev/skills@remotion-best-practices` (365K installs) and
+  `heygen-com/hyperframes@remotion-to-hyperframes`. Install via
+  `npx skills add remotion-dev/skills@remotion-best-practices -g -y`. Remotion
+  renders a video file (great for a shareable clip; wrong tool for an in-page
+  hero, which is why the hero is native).
+
 ## Things Sean has said to remember
 
 - **Mobile-first is non-negotiable**; desktop is secondary.
