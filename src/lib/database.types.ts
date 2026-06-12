@@ -66,6 +66,18 @@ export interface ActivityRow {
   created_at: string;
 }
 
+export interface SavedLessonRow {
+  user_id: string;
+  video_id: string;
+  created_at: string;
+}
+
+export interface FollowedChannelRow {
+  user_id: string;
+  teacher_id: string;
+  created_at: string;
+}
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;

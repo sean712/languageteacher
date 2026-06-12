@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
+import { useFollowChannel } from '../lib/learner';
 import type {
   ActivityRow,
   TeacherRow,
@@ -34,16 +35,20 @@ export default function TeacherPage() {
     'loading',
   );
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(() => searchParams.get('l'));
   const gridScrollY = useRef(0);
 
   const openLesson = (id: string) => {
     gridScrollY.current = window.scrollY;
     setOpenId(id);
+    // Deep-linkable so saved-lesson links (e.g. /:slug?l=<id>) open it directly.
+    setSearchParams({ l: id }, { replace: false });
     window.scrollTo(0, 0);
   };
   const closeLesson = () => {
     setOpenId(null);
+    setSearchParams({}, { replace: false });
     // Restore grid scroll after the grid re-renders.
     requestAnimationFrame(() => window.scrollTo(0, gridScrollY.current));
   };
@@ -190,28 +195,39 @@ export default function TeacherPage() {
             >
               Lingua
             </Link>
-            {isOwner && (
-              <Link
-                to={`/dashboard/${teacher.slug}`}
-                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-              >
-                Manage channel →
-              </Link>
-            )}
+            <div className="flex items-center gap-3 text-sm font-medium">
+              {isOwner && (
+                <Link
+                  to={`/dashboard/${teacher.slug}`}
+                  className="text-emerald-600 hover:text-emerald-700"
+                >
+                  Manage channel →
+                </Link>
+              )}
+              {user ? (
+                <Link to="/library" className="text-ink-600 hover:text-ink-900">
+                  Library
+                </Link>
+              ) : (
+                <Link to="/login" className="text-ink-600 hover:text-ink-900">
+                  Sign in
+                </Link>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-4 pb-7 pt-2">
+          <div className="flex items-start gap-4 pb-7 pt-2">
             {teacher.avatar_url ? (
               <img
                 src={teacher.avatar_url}
                 alt=""
-                className="w-16 h-16 rounded-full object-cover ring-1 ring-paper-300"
+                className="w-16 h-16 rounded-full object-cover ring-1 ring-paper-300 flex-shrink-0"
               />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-600 font-display font-semibold text-2xl">
+              <div className="w-16 h-16 rounded-full bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-600 font-display font-semibold text-2xl flex-shrink-0">
                 {teacher.display_name[0]?.toUpperCase()}
               </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight truncate">
                 {teacher.display_name}
               </h1>
@@ -226,6 +242,7 @@ export default function TeacherPage() {
                 </p>
               )}
             </div>
+            {!isOwner && <FollowButton teacherId={teacher.id} />}
           </div>
         </div>
       </header>
@@ -370,6 +387,34 @@ function FilterChip({
       }`}
     >
       {label}
+    </button>
+  );
+}
+
+function FollowButton({ teacherId }: { teacherId: string }) {
+  const { following, toggle, signedIn } = useFollowChannel(teacherId);
+  const navigate = useNavigate();
+
+  const onClick = () => {
+    if (!signedIn) {
+      navigate('/login', { state: { from: window.location.pathname + window.location.search } });
+      return;
+    }
+    toggle();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={following}
+      className={`flex-shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
+        following
+          ? 'border-paper-300 bg-paper-50 text-ink-700 hover:border-ink-400'
+          : 'border-ink-900 bg-ink-900 text-paper-50 hover:bg-ink-700'
+      }`}
+    >
+      {following ? 'Following' : 'Follow'}
     </button>
   );
 }

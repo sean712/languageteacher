@@ -187,6 +187,7 @@ export default function ReviewVideo() {
             key={activities.map((a) => a.id).join(',')}
             video={video}
             activities={activities}
+            showSave={false}
           />
         </div>
       ) : (

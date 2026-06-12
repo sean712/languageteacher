@@ -1,0 +1,105 @@
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from './supabase';
+import { useAuth } from './auth';
+
+// Learner save/follow state. Anonymous users get a passive false state; the
+// calling component handles the "sign in to save" redirect. Data is owned by
+// the auth user (RLS), so it syncs across devices.
+
+export function useSavedLesson(videoId: string) {
+  const { user } = useAuth();
+  const [saved, setSaved] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setSaved(false);
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('saved_lessons')
+      .select('video_id')
+      .eq('user_id', user.id)
+      .eq('video_id', videoId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) {
+          setSaved(Boolean(data));
+          setReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, videoId]);
+
+  const toggle = useCallback(async () => {
+    if (!user) return;
+    if (saved) {
+      setSaved(false);
+      await supabase
+        .from('saved_lessons')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('video_id', videoId);
+    } else {
+      setSaved(true);
+      await supabase
+        .from('saved_lessons')
+        .insert({ user_id: user.id, video_id: videoId });
+    }
+  }, [user, saved, videoId]);
+
+  return { saved, ready, toggle, signedIn: Boolean(user) };
+}
+
+export function useFollowChannel(teacherId: string) {
+  const { user } = useAuth();
+  const [following, setFollowing] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setFollowing(false);
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('followed_channels')
+      .select('teacher_id')
+      .eq('user_id', user.id)
+      .eq('teacher_id', teacherId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) {
+          setFollowing(Boolean(data));
+          setReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, teacherId]);
+
+  const toggle = useCallback(async () => {
+    if (!user) return;
+    if (following) {
+      setFollowing(false);
+      await supabase
+        .from('followed_channels')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('teacher_id', teacherId);
+    } else {
+      setFollowing(true);
+      await supabase
+        .from('followed_channels')
+        .insert({ user_id: user.id, teacher_id: teacherId });
+    }
+  }, [user, following, teacherId]);
+
+  return { following, ready, toggle, signedIn: Boolean(user) };
+}

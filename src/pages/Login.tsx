@@ -44,14 +44,15 @@ export default function Login() {
         <div className="flex-1 flex items-center px-5 sm:px-8 pb-16">
           <div className="w-full max-w-sm mx-auto animate-rise">
             <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
-              Creator sign-in
+              Sign in
             </span>
             <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight mt-3">
-              Welcome back.
+              Welcome to Lingua.
             </h1>
             <p className="text-ink-500 mt-3 leading-relaxed">
               Enter your email and we’ll send a one-click sign-in link — no
-              password to remember.
+              password to remember. Save lessons, track progress, and manage
+              your channels.
             </p>
 
             {status === 'sent' ? (
@@ -118,12 +119,12 @@ export default function Login() {
         <span className="font-display text-lg font-semibold relative">Lingua</span>
         <div className="relative max-w-md">
           <p className="font-display text-3xl xl:text-4xl font-semibold leading-[1.15] tracking-tight">
-            Your channel is a course
-            <span className="text-emerald-400"> waiting to happen.</span>
+            Where watching
+            <span className="text-emerald-400"> becomes learning.</span>
           </p>
           <p className="text-paper-300 mt-4 leading-relaxed">
-            Lingua turns your YouTube videos into interactive lessons —
-            automatically — so your audience does more than watch.
+            Save lessons, track your progress, and practise with the creators
+            you follow.
           </p>
         </div>
         <p className="relative text-sm text-paper-300/70">
