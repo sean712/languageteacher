@@ -196,7 +196,7 @@ function ConnectForm({
 }) {
   const ready = channel.trim() && category && audience;
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} className="animate-rise">
       <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
         Connect a channel
       </span>

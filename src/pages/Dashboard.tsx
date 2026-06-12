@@ -43,7 +43,7 @@ export default function Dashboard() {
     <main className="min-h-dvh bg-paper-100 text-ink-900">
       <CreatorHeader />
       <section className="max-w-3xl mx-auto px-5 sm:px-8 pt-8 sm:pt-12 pb-20">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex items-end justify-between gap-4 animate-rise">
           <div>
             <h1 className="font-display text-3xl font-semibold tracking-tight">
               Your channels
@@ -54,19 +54,30 @@ export default function Dashboard() {
           </div>
           <Link
             to="/connect"
-            className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 transition-colors"
+            className="flex-shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 text-paper-50 text-sm font-medium hover:bg-emerald-700 hover:-translate-y-0.5 transition-all"
           >
             Connect channel
           </Link>
         </div>
 
         {channels === null ? (
-          <p className="text-ink-400 py-16 text-center">Loading…</p>
+          <div className="mt-8 flex flex-col gap-3">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-[4.75rem] rounded-2xl border border-paper-300/70 bg-paper-50 animate-pulse"
+              />
+            ))}
+          </div>
         ) : channels.length === 0 ? (
-          <div className="mt-10 rounded-2xl border border-paper-300/70 bg-paper-50 p-8 text-center">
-            <h2 className="font-display text-xl font-medium">No channels yet</h2>
-            <p className="text-ink-500 mt-2 text-sm">
-              Connect a YouTube channel and Lingua will build lessons from it.
+          <div className="mt-10 rounded-2xl border border-paper-300/70 bg-paper-50 p-10 text-center animate-rise">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 grid place-items-center text-xl mx-auto">
+              ✨
+            </div>
+            <h2 className="font-display text-xl font-medium mt-4">No channels yet</h2>
+            <p className="text-ink-500 mt-2 text-sm max-w-sm mx-auto">
+              Connect a YouTube channel and Lingua will turn its videos into
+              interactive lessons — automatically.
             </p>
             <Link
               to="/connect"
@@ -77,8 +88,8 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="mt-8 flex flex-col gap-3">
-            {channels.map((c) => (
-              <ChannelCard key={c.teacher.id} summary={c} />
+            {channels.map((c, i) => (
+              <ChannelCard key={c.teacher.id} summary={c} index={i} />
             ))}
           </div>
         )}
@@ -87,12 +98,13 @@ export default function Dashboard() {
   );
 }
 
-function ChannelCard({ summary }: { summary: ChannelSummary }) {
+function ChannelCard({ summary, index }: { summary: ChannelSummary; index: number }) {
   const { teacher, published, needs_review, working, not_processed } = summary;
   return (
     <Link
       to={`/dashboard/${teacher.slug}`}
-      className="rounded-2xl border border-paper-300/70 bg-paper-50 p-4 hover:border-ink-400 transition-colors flex items-center gap-4"
+      style={{ animationDelay: `${index * 70}ms` }}
+      className="animate-rise rounded-2xl border border-paper-300/70 bg-paper-50 p-4 hover:border-ink-400 hover:shadow-[0_14px_30px_-20px_rgba(26,25,22,0.35)] transition-all flex items-center gap-4"
     >
       {teacher.avatar_url ? (
         <img

@@ -51,47 +51,61 @@ function Hero() {
     <section className="max-w-5xl mx-auto px-5 sm:px-8 pt-12 sm:pt-20 pb-14">
       <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-10 items-center">
         <div>
-          <span className="inline-flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
+          <span className="animate-rise inline-flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             For YouTube educators
           </span>
 
-          <h1 className="font-display font-semibold tracking-tight text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.02] mt-5">
+          <h1
+            className="animate-rise font-display font-semibold tracking-tight text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.02] mt-5"
+            style={{ animationDelay: '60ms' }}
+          >
             Turn your videos
             <br />
             into a{' '}
             <span className="text-emerald-600 italic">course.</span>
           </h1>
 
-          <p className="mt-6 text-lg text-ink-700 leading-relaxed max-w-md">
+          <p
+            className="animate-rise mt-6 text-lg text-ink-700 leading-relaxed max-w-md"
+            style={{ animationDelay: '120ms' }}
+          >
             Lingua reads your YouTube channel and automatically builds
             flashcards, quizzes and practice from every lesson — so your
             audience does more than watch. They learn.
           </p>
 
-          <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div
+            className="animate-rise mt-8 flex flex-col sm:flex-row gap-3 sm:items-center"
+            style={{ animationDelay: '180ms' }}
+          >
             <Link
               to="/connect"
-              className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors shadow-sm"
+              className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 hover:-translate-y-0.5 transition-all shadow-sm"
             >
               Connect your channel
             </Link>
             <Link
               to="/demo-teacher"
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-3.5 rounded-xl text-ink-900 font-medium hover:bg-paper-200/70 transition-colors"
+              className="group inline-flex items-center justify-center gap-1.5 px-4 py-3.5 rounded-xl text-ink-900 font-medium hover:bg-paper-200/70 transition-colors"
             >
               See a live example
-              <span aria-hidden>→</span>
+              <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">→</span>
             </Link>
           </div>
 
-          <p className="mt-5 text-sm text-ink-400">
+          <p
+            className="animate-rise mt-5 text-sm text-ink-400"
+            style={{ animationDelay: '240ms' }}
+          >
             Free to start · No editing your videos · Works with your existing
             uploads
           </p>
         </div>
 
-        <HeroVisual />
+        <div className="animate-rise" style={{ animationDelay: '160ms' }}>
+          <HeroVisual />
+        </div>
       </div>
     </section>
   );
@@ -217,7 +231,10 @@ function HowItWorks() {
       </h2>
       <div className="grid sm:grid-cols-3 gap-px bg-paper-300/60 rounded-2xl overflow-hidden border border-paper-300/60 mt-10">
         {steps.map((s) => (
-          <div key={s.n} className="bg-paper-100 p-6 sm:p-7">
+          <div
+            key={s.n}
+            className="bg-paper-100 p-6 sm:p-7 transition-colors hover:bg-paper-50"
+          >
             <div className="font-display text-emerald-600 text-lg">{s.n}</div>
             <h3 className="font-medium text-lg mt-3">{s.title}</h3>
             <p className="text-ink-500 text-sm leading-relaxed mt-2">{s.body}</p>
@@ -240,7 +257,7 @@ function ValueProps() {
     },
     {
       title: 'Your brand, your page',
-      body: 'A dedicated space at your own handle. Learners browse your lessons by level — your name on every one.',
+      body: 'A dedicated space at your own handle — your videos, your lessons, your name on every one.',
     },
     {
       title: 'Built mobile-first',

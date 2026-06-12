@@ -513,7 +513,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-dvh bg-paper-100 text-ink-900">
       <CreatorHeader />
-      <section className="max-w-3xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-20">
+      <section className="max-w-3xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-20 animate-rise">
         {children}
       </section>
     </main>
