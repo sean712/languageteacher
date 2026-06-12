@@ -6,6 +6,7 @@ import GapFill from './GapFill';
 import Matching from './Matching';
 import QuickPractice from './QuickPractice';
 import FreeWrite from './FreeWrite';
+import YouTubeEmbed from './YouTubeEmbed';
 import {
   ActivitySchemas,
   type ActivityType,
@@ -226,6 +227,11 @@ export default function VideoCard({ video, activities, defaultOpen = false }: Pr
 
       {open && (
         <div className="border-t border-paper-300/60 p-4 sm:p-5">
+          {/* Watch the source video right here, alongside the activities. */}
+          <div className="mb-5">
+            <YouTubeEmbed videoId={video.youtube_video_id} title={video.title} />
+          </div>
+
           {parsed.length === 0 ? (
             <p className="text-sm text-ink-400">
               No activities generated for this lesson yet.
