@@ -18,6 +18,38 @@ import {
   sentenceFeedbackPrompt,
 } from './prompts.ts';
 
+// Uses OpenAI's Responses API (client.responses.create). The two small,
+// fixed-shape calls (detection, sentence feedback) use strict json_schema
+// Structured Outputs — the model literally can't return a non-conforming
+// object, so no parse/repair retry is needed. Activity generation uses
+// json_object mode + Zod validation with one repair retry, because its schema
+// is a large discriminated union (FlashcardSchema | QuizSchema | …) that isn't
+// worth hand-maintaining as strict JSON Schema alongside the Zod source of
+// truth in schemas.ts.
+
+const DETECTION_SCHEMA = {
+  type: 'object',
+  properties: {
+    language: { type: 'string' },
+    level: { type: 'string', enum: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] },
+  },
+  required: ['language', 'level'],
+  additionalProperties: false,
+} as const;
+
+// Strict mode requires every property in `required`, so the optional
+// `correction` is required-but-nullable here and normalized to undefined below.
+const FEEDBACK_SCHEMA = {
+  type: 'object',
+  properties: {
+    rating: { type: 'string', enum: ['great', 'good', 'needs_work'] },
+    feedback: { type: 'string' },
+    correction: { type: ['string', 'null'] },
+  },
+  required: ['rating', 'feedback', 'correction'],
+  additionalProperties: false,
+} as const;
+
 export class OpenAIProvider implements AIProvider {
   readonly name = 'openai';
   private client: OpenAI;
@@ -25,53 +57,33 @@ export class OpenAIProvider implements AIProvider {
 
   constructor(opts: { apiKey: string; model?: string }) {
     this.client = new OpenAI({ apiKey: opts.apiKey });
-    this.model = opts.model ?? Deno.env.get('OPENAI_MODEL') ?? 'gpt-4o-mini';
+    this.model = opts.model ?? Deno.env.get('OPENAI_MODEL') ?? 'gpt-5-mini';
   }
 
   async detectLanguageAndLevel(text: string): Promise<DetectResult> {
     const { system, user } = detectLanguageAndLevelPrompt(text);
-    const resp = await this.client.chat.completions.create({
-      model: this.model,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-    const raw = resp.choices[0]?.message?.content ?? '{}';
+    let parsed: { language?: unknown; level?: unknown };
     try {
-      const parsed = JSON.parse(raw);
-      return {
-        language: String(parsed.language ?? 'unknown'),
-        level: String(parsed.level ?? 'A2'),
-      };
+      parsed = await this.respondJsonSchema(system, user, 'detection', DETECTION_SCHEMA);
     } catch (e) {
-      throw new AIProviderError('detect: invalid JSON from OpenAI', e, true);
+      throw new AIProviderError('detect: Responses API call failed', e, true);
     }
-  }
-
-  async generateActivities(input: ActivityGenInput): Promise<ActivityBundle> {
-    const { system, user } = activityGenerationPrompt(input);
-    return await this.callAndParse(system, user, /* retry */ true);
+    return {
+      language: String(parsed.language ?? 'unknown'),
+      level: String(parsed.level ?? 'A2'),
+    };
   }
 
   async evaluateSentence(input: SentenceFeedbackInput): Promise<SentenceFeedback> {
     const { system, user } = sentenceFeedbackPrompt(input);
-    const resp = await this.client.chat.completions.create({
-      model: this.model,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-    const raw = resp.choices[0]?.message?.content ?? '{}';
-    let json: unknown;
+    let json: Record<string, unknown>;
     try {
-      json = JSON.parse(raw);
+      json = await this.respondJsonSchema(system, user, 'sentence_feedback', FEEDBACK_SCHEMA);
     } catch (e) {
-      throw new AIProviderError('feedback: invalid JSON from OpenAI', e, true);
+      throw new AIProviderError('feedback: Responses API call failed', e, true);
     }
+    // Strict schema returns correction as string|null; Zod wants string|undefined.
+    if (json.correction === null) delete json.correction;
     const validated = SentenceFeedbackSchema.safeParse(json);
     if (!validated.success) {
       throw new AIProviderError(
@@ -81,20 +93,52 @@ export class OpenAIProvider implements AIProvider {
     return validated.data;
   }
 
+  async generateActivities(input: ActivityGenInput): Promise<ActivityBundle> {
+    const { system, user } = activityGenerationPrompt(input);
+    return await this.callAndParse(system, user, /* retry */ true);
+  }
+
+  // --- Responses API helpers ---
+
+  // Strict Structured Outputs: returns an object guaranteed to match `schema`.
+  private async respondJsonSchema<T = Record<string, unknown>>(
+    system: string,
+    user: string,
+    name: string,
+    schema: Record<string, unknown>,
+  ): Promise<T> {
+    const resp = await this.client.responses.create({
+      model: this.model,
+      // gpt-5 reasoning models: keep effort low — these are fixed-shape
+      // extraction tasks, not problems that need deep reasoning, and the batch
+      // worker must stay inside the Edge wall-clock.
+      reasoning: { effort: 'low' },
+      input: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      text: { format: { type: 'json_schema', name, strict: true, schema } },
+    });
+    return JSON.parse(resp.output_text || '{}') as T;
+  }
+
+  // JSON-object mode + Zod validation, with one repair retry on bad JSON or a
+  // schema mismatch.
   private async callAndParse(
     system: string,
     user: string,
     retry: boolean,
   ): Promise<ActivityBundle> {
-    const resp = await this.client.chat.completions.create({
+    const resp = await this.client.responses.create({
       model: this.model,
-      response_format: { type: 'json_object' },
-      messages: [
+      reasoning: { effort: 'low' },
+      input: [
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
+      text: { format: { type: 'json_object' } },
     });
-    const raw = resp.choices[0]?.message?.content ?? '';
+    const raw = resp.output_text ?? '';
     let json: unknown;
     try {
       json = JSON.parse(raw);
