@@ -25,6 +25,9 @@ import {
 // a lesson's flashcard terms (not a stored activity row).
 export type MenuType = ActivityType | 'free_write';
 
+// Premium = makes AI/API calls → account-gated. Static activities are free.
+const PREMIUM_ACTIVITIES = new Set<MenuType>(['free_write']);
+
 const FREE_WRITE_MAX_WORDS = 6;
 
 // Order activities are offered in: warm-up → recall → production.
@@ -133,10 +136,22 @@ export default function LessonActivities({
     : null;
   const nextUp = parsed.find((p) => p.type !== selected && !completed.has(p.type));
 
-  // AI chat is account-gated (the premium feature). Anonymous → sign in.
+  const requireSignIn = () =>
+    navigate('/login', { state: { from: location.pathname + location.search } });
+
+  // Premium activities (AI feedback) are account-gated; static ones are free.
+  const onPick = (t: MenuType) => {
+    if (PREMIUM_ACTIVITIES.has(t) && !user) {
+      requireSignIn();
+      return;
+    }
+    setSelected(t);
+  };
+
+  // AI chat is account-gated (premium). Anonymous → sign in.
   const onChat = () => {
     if (!user) {
-      navigate('/login', { state: { from: location.pathname + location.search } });
+      requireSignIn();
       return;
     }
     setChatting(true);
@@ -181,8 +196,9 @@ export default function LessonActivities({
       completed={completed}
       doneCount={doneCount}
       allDone={allDone}
-      onPick={setSelected}
+      onPick={onPick}
       onChat={onChat}
+      signedIn={Boolean(user)}
     />
   );
 }
@@ -194,6 +210,7 @@ function ActivityMenu({
   allDone,
   onPick,
   onChat,
+  signedIn,
 }: {
   parsed: ParsedActivity[];
   completed: Set<string>;
@@ -201,6 +218,7 @@ function ActivityMenu({
   allDone: boolean;
   onPick: (t: MenuType) => void;
   onChat: () => void;
+  signedIn: boolean;
 }) {
   return (
     <div>
@@ -232,8 +250,9 @@ function ActivityMenu({
                 {isDone ? <CheckIcon /> : <ActivityIcon type={p.type} />}
               </span>
               <span className="min-w-0">
-                <span className="block font-medium leading-tight">
+                <span className="flex items-center gap-1.5 font-medium leading-tight">
                   {META[p.type].label}
+                  {PREMIUM_ACTIVITIES.has(p.type) && !signedIn && <PremiumTag />}
                 </span>
                 <span className="block text-xs text-ink-400 mt-0.5">
                   {META[p.type].blurb} · {countLabel(p.type, p.count)}
@@ -259,8 +278,9 @@ function ActivityMenu({
             ✦
           </span>
           <span className="min-w-0">
-            <span className="block font-medium leading-tight">
+            <span className="flex items-center gap-1.5 font-medium leading-tight">
               Ask the AI tutor
+              {!signedIn && <PremiumTag />}
             </span>
             <span className="block text-xs text-ink-400 mt-0.5">
               Chat about this lesson · anything you’re unsure about
@@ -467,5 +487,13 @@ function CheckIcon() {
     >
       <path d="M5 12l5 5L20 7" />
     </svg>
+  );
+}
+
+function PremiumTag() {
+  return (
+    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
+      Account
+    </span>
   );
 }

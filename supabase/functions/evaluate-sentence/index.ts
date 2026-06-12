@@ -10,6 +10,7 @@
 // launch it needs rate-limiting / abuse protection (per-IP or a learner
 // token); the SENTENCE length cap here is only a blunt first guard.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2.107.0';
 import { getAIProvider } from '../_shared/provider-factory.ts';
 import { AIProviderError } from '../_shared/ai-types.ts';
 
@@ -21,6 +22,22 @@ const CORS = {
 };
 
 const MAX_SENTENCE = 600;
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+// Free-write AI feedback is premium (makes an AI call) → account-gated.
+// verify_jwt accepts the anon key, so resolve the real user here.
+async function callerUserId(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return null;
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data } = await client.auth.getUser();
+  return data.user?.id ?? null;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -38,6 +55,11 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const userId = await callerUserId(req);
+    if (!userId) {
+      return json({ error: 'Please sign in to get AI feedback.' }, 401);
+    }
+
     const body = await req.json().catch(() => ({})) as {
       word?: string;
       translation?: string;

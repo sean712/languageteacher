@@ -76,3 +76,15 @@ html, body, #root {
 /* Thin scrollbars on the horizontal filter rails. */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Notebook: faint ruled lines + a margin rule, for the note-taking surface. */
+.notebook-paper {
+  background-color: var(--color-paper-50);
+  background-image:
+    linear-gradient(var(--color-paper-200) 1px, transparent 1px);
+  background-size: 100% 1.75rem;
+  background-position: 0 0.5rem;
+}
+.notebook-margin {
+  box-shadow: inset 2px 0 0 rgba(31, 122, 90, 0.18);
+}

@@ -158,6 +158,9 @@ export default function Library() {
             Lingua
           </Link>
           <div className="flex items-center gap-3 text-sm">
+            <Link to="/notebook" className="text-ink-600 hover:text-ink-900">
+              Notebook
+            </Link>
             {user?.email && (
               <span className="text-ink-400 hidden sm:inline">{user.email}</span>
             )}

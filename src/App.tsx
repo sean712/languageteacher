@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import ChannelManage from './pages/ChannelManage';
 import ReviewVideo from './pages/ReviewVideo';
 import Library from './pages/Library';
+import Notebook from './pages/Notebook';
 import TeacherPage from './pages/TeacherPage';
 import RequireAuth from './components/RequireAuth';
 
@@ -51,6 +52,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Library />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/notebook"
+        element={
+          <RequireAuth>
+            <Notebook />
           </RequireAuth>
         }
       />

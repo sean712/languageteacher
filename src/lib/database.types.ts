@@ -78,6 +78,15 @@ export interface FollowedChannelRow {
   created_at: string;
 }
 
+export interface NoteRow {
+  id: string;
+  user_id: string;
+  video_id: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 type TableShape<Row> = {
   Row: Row;
   Insert: Partial<Row>;
