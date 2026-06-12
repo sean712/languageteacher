@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import type { ActivityRow, TeacherRow, VideoRow } from '../lib/database.types';
 import CreatorHeader from '../components/CreatorHeader';
-import VideoCard from '../components/VideoCard';
+import LessonView from '../components/LessonView';
 import ActivityEditor from '../components/ActivityEditor';
 
 type Load = 'loading' | 'ready' | 'not_found';
@@ -183,11 +183,10 @@ export default function ReviewVideo() {
         </div>
       ) : hasActivities ? (
         <div className="mt-3">
-          <VideoCard
+          <LessonView
             key={activities.map((a) => a.id).join(',')}
             video={video}
             activities={activities}
-            defaultOpen
           />
         </div>
       ) : (
@@ -305,7 +304,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-dvh bg-paper-100 text-ink-900">
       <CreatorHeader />
-      <section className="max-w-2xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-20">
+      <section className="max-w-4xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-20">
         {children}
       </section>
     </main>

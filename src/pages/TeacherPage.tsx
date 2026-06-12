@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
@@ -7,7 +7,8 @@ import type {
   TeacherRow,
   VideoRow,
 } from '../lib/database.types';
-import VideoCard from '../components/VideoCard';
+import LessonCard from '../components/LessonCard';
+import LessonView from '../components/LessonView';
 
 interface FeedItem {
   video: VideoRow;
@@ -33,6 +34,19 @@ export default function TeacherPage() {
     'loading',
   );
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const gridScrollY = useRef(0);
+
+  const openLesson = (id: string) => {
+    gridScrollY.current = window.scrollY;
+    setOpenId(id);
+    window.scrollTo(0, 0);
+  };
+  const closeLesson = () => {
+    setOpenId(null);
+    // Restore grid scroll after the grid re-renders.
+    requestAnimationFrame(() => window.scrollTo(0, gridScrollY.current));
+  };
 
   useEffect(() => {
     if (!teacherSlug) return;
@@ -58,7 +72,7 @@ export default function TeacherPage() {
       setTeacher(t);
 
       // Explicit safe columns: anon has column-level grants (not '*'), and
-      // VideoCard only needs these.
+      // LessonCard/LessonView only need these.
       const { data: videos, error: vErr } = await supabase
         .from('videos')
         .select(
@@ -121,6 +135,10 @@ export default function TeacherPage() {
     [feed, typeFilter],
   );
 
+  const openItem = openId
+    ? feed.find((item) => item.video.id === openId) ?? null
+    : null;
+
   if (state === 'loading') {
     return (
       <main className="min-h-dvh flex items-center justify-center text-ink-400">
@@ -164,7 +182,7 @@ export default function TeacherPage() {
   return (
     <main className="min-h-dvh pb-24 bg-paper-100 text-ink-900">
       <header className="border-b border-paper-300/60 bg-paper-50">
-        <div className="max-w-2xl mx-auto px-5 sm:px-6">
+        <div className="max-w-5xl mx-auto px-5 sm:px-8">
           <div className="h-14 flex items-center justify-between">
             <Link
               to="/"
@@ -212,54 +230,77 @@ export default function TeacherPage() {
         </div>
       </header>
 
-      {feed.length > 0 && (
-        <nav
-          aria-label="Filter lessons"
-          className="sticky top-0 z-10 bg-paper-100/85 backdrop-blur border-b border-paper-300/60"
-        >
-          <div className="max-w-2xl mx-auto px-3 sm:px-6 py-2.5 flex gap-2 overflow-x-auto no-scrollbar">
-            <FilterChip
-              label="All"
-              active={typeFilter === 'all'}
-              onClick={() => setTypeFilter('all')}
-            />
-            <FilterChip
-              label="Lessons"
-              active={typeFilter === 'long'}
-              onClick={() => setTypeFilter(typeFilter === 'long' ? 'all' : 'long')}
-            />
-            <FilterChip
-              label="Shorts"
-              active={typeFilter === 'short'}
-              onClick={() => setTypeFilter(typeFilter === 'short' ? 'all' : 'short')}
-            />
-          </div>
-        </nav>
+      {openItem ? (
+        /* Focused lesson — video beside activities on desktop. */
+        <section className="max-w-5xl mx-auto px-5 sm:px-8 mt-4">
+          <button
+            type="button"
+            onClick={closeLesson}
+            className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900 transition-colors mb-4"
+          >
+            <span aria-hidden>←</span> All lessons
+          </button>
+          <LessonView
+            key={openItem.video.id}
+            video={openItem.video}
+            activities={openItem.activities}
+          />
+        </section>
+      ) : (
+        <>
+          {feed.length > 0 && (
+            <nav
+              aria-label="Filter lessons"
+              className="sticky top-0 z-10 bg-paper-100/85 backdrop-blur border-b border-paper-300/60"
+            >
+              <div className="max-w-5xl mx-auto px-5 sm:px-8 py-2.5 flex gap-2 overflow-x-auto no-scrollbar">
+                <FilterChip
+                  label="All"
+                  active={typeFilter === 'all'}
+                  onClick={() => setTypeFilter('all')}
+                />
+                <FilterChip
+                  label="Lessons"
+                  active={typeFilter === 'long'}
+                  onClick={() => setTypeFilter(typeFilter === 'long' ? 'all' : 'long')}
+                />
+                <FilterChip
+                  label="Shorts"
+                  active={typeFilter === 'short'}
+                  onClick={() => setTypeFilter(typeFilter === 'short' ? 'all' : 'short')}
+                />
+              </div>
+            </nav>
+          )}
+
+          <section className="max-w-5xl mx-auto px-5 sm:px-8 mt-5">
+            {feed.length === 0 && comingSoon.length === 0 ? (
+              <p className="text-center text-ink-400 py-16">
+                No lessons yet — check back soon.
+              </p>
+            ) : feed.length > 0 && filtered.length === 0 ? (
+              <p className="text-center text-ink-400 py-16">
+                Nothing matches those filters yet.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filtered.map((item) => (
+                  <LessonCard
+                    key={item.video.id}
+                    video={item.video}
+                    activities={item.activities}
+                    onOpen={openLesson}
+                  />
+                ))}
+              </div>
+            )}
+
+            {comingSoon.length > 0 && (
+              <ComingSoonSection items={comingSoon} hasPublished={feed.length > 0} />
+            )}
+          </section>
+        </>
       )}
-
-      <section className="max-w-2xl mx-auto px-3 sm:px-6 mt-4 flex flex-col gap-4">
-        {feed.length === 0 && comingSoon.length === 0 ? (
-          <p className="text-center text-ink-400 py-16">
-            No lessons yet — check back soon.
-          </p>
-        ) : feed.length > 0 && filtered.length === 0 ? (
-          <p className="text-center text-ink-400 py-16">
-            Nothing matches those filters yet.
-          </p>
-        ) : (
-          filtered.map((item) => (
-            <VideoCard
-              key={item.video.id}
-              video={item.video}
-              activities={item.activities}
-            />
-          ))
-        )}
-
-        {comingSoon.length > 0 && (
-          <ComingSoonSection items={comingSoon} hasPublished={feed.length > 0} />
-        )}
-      </section>
     </main>
   );
 }
@@ -281,7 +322,7 @@ function ComingSoonSection({
           ? 'More lessons are being prepared from these videos.'
           : 'Interactive lessons are being prepared from these videos — check back soon.'}
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
         {items.map((v) => (
           <div key={v.id} className="flex flex-col gap-1.5">
             <div className="relative aspect-video rounded-xl overflow-hidden bg-paper-200">

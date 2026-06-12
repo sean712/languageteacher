@@ -22,7 +22,7 @@ interface SavedSentence {
 }
 
 // Per-device store of the learner's own sentences, keyed by lesson. Mirrors
-// the completion store in VideoCard — anonymous, no auth needed yet.
+// the completion store in LessonActivities — anonymous, no auth needed yet.
 function useSavedSentences(videoId: string) {
   const key = `lingua:saved:${videoId}`;
   const [saved, setSaved] = useState<SavedSentence[]>(() => {

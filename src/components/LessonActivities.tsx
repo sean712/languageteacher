@@ -6,7 +6,6 @@ import GapFill from './GapFill';
 import Matching from './Matching';
 import QuickPractice from './QuickPractice';
 import FreeWrite from './FreeWrite';
-import YouTubeEmbed from './YouTubeEmbed';
 import {
   ActivitySchemas,
   type ActivityType,
@@ -18,15 +17,9 @@ import {
   type QuickPracticePayload,
 } from '../lib/activity-schemas';
 
-type Props = {
-  video: VideoRow;
-  activities: ActivityRow[];
-  defaultOpen?: boolean;
-};
-
 // Menu types include 'free_write', a frontend-only activity synthesized from
 // a lesson's flashcard terms (not a stored activity row).
-type MenuType = ActivityType | 'free_write';
+export type MenuType = ActivityType | 'free_write';
 
 const FREE_WRITE_MAX_WORDS = 6;
 
@@ -48,13 +41,13 @@ const META: Record<MenuType, { label: string; blurb: string }> = {
   free_write: { label: 'Make it personal', blurb: 'Write your own sentence' },
 };
 
-interface ParsedActivity {
+export interface ParsedActivity {
   type: MenuType;
   count: number;
   payload: unknown;
 }
 
-function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
+export function parseActivities(activities: ActivityRow[]): ParsedActivity[] {
   const parsed: ParsedActivity[] = [];
   let flashcards: FlashcardsPayload | null = null;
   let quickPractice: QuickPracticePayload | null = null;
@@ -112,7 +105,7 @@ function countLabel(type: MenuType, count: number): string {
 }
 
 // Per-device completion memory, keyed by video. No auth needed.
-function useCompleted(videoId: string) {
+export function useCompleted(videoId: string) {
   const key = `lingua:done:${videoId}`;
   const [done, setDone] = useState<Set<string>>(() => {
     try {
@@ -141,8 +134,15 @@ function useCompleted(videoId: string) {
   return [done, mark] as const;
 }
 
-export default function VideoCard({ video, activities, defaultOpen = false }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
+// The activity engine: a picker that opens one activity at a time in a focused
+// view, with per-device completion. Used inside LessonView.
+export default function LessonActivities({
+  video,
+  activities,
+}: {
+  video: VideoRow;
+  activities: ActivityRow[];
+}) {
   const [selected, setSelected] = useState<MenuType | null>(null);
   const [completed, markComplete] = useCompleted(video.id);
 
@@ -153,111 +153,34 @@ export default function VideoCard({ video, activities, defaultOpen = false }: Pr
   const current = selected
     ? parsed.find((p) => p.type === selected) ?? null
     : null;
-  const nextUp = parsed.find(
-    (p) => p.type !== selected && !completed.has(p.type),
-  );
+  const nextUp = parsed.find((p) => p.type !== selected && !completed.has(p.type));
 
-  return (
-    <article className="rounded-2xl border border-paper-300/70 bg-paper-50 overflow-hidden transition-shadow hover:shadow-[0_14px_30px_-20px_rgba(26,25,22,0.35)]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="w-full text-left hover:bg-paper-100/60 transition-colors"
-      >
-        <div className="flex gap-3.5 p-3.5">
-          {video.thumbnail_url && (
-            <div className="relative w-32 h-[5.5rem] sm:w-36 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 bg-paper-200">
-              <img
-                src={video.thumbnail_url}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-              {video.type === 'short' && (
-                <span className="absolute top-1.5 left-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-ink-900/80 text-paper-50">
-                  Short
-                </span>
-              )}
-            </div>
-          )}
-          <div className="min-w-0 flex flex-col justify-between py-0.5">
-            <h3 className="text-[0.95rem] sm:text-base font-medium leading-snug line-clamp-2">
-              {video.title ?? 'Untitled lesson'}
-            </h3>
-            <div className="flex items-center gap-2 mt-2 text-xs text-ink-400">
-              {video.language && (
-                <span className="capitalize">{video.language}</span>
-              )}
-              {parsed.length > 0 && (
-                <span>
-                  · {parsed.length}{' '}
-                  {parsed.length === 1 ? 'activity' : 'activities'}
-                </span>
-              )}
-              {doneCount > 0 && (
-                <span className="text-emerald-600 font-medium">
-                  · {allDone ? 'all done' : `${doneCount} done`}
-                </span>
-              )}
-            </div>
-          </div>
-          <span
-            aria-hidden
-            className={`self-center ml-auto pr-1 text-ink-400 transition-transform ${
-              open ? 'rotate-180' : ''
-            }`}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                d="M6 9l6 6 6-6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-        </div>
-      </button>
+  if (parsed.length === 0) {
+    return (
+      <p className="text-sm text-ink-400">
+        No activities generated for this lesson yet.
+      </p>
+    );
+  }
 
-      {open && (
-        <div className="border-t border-paper-300/60 p-4 sm:p-5">
-          {/* Watch the source video right here, alongside the activities. */}
-          <div className="mb-5">
-            <YouTubeEmbed videoId={video.youtube_video_id} title={video.title} />
-          </div>
-
-          {parsed.length === 0 ? (
-            <p className="text-sm text-ink-400">
-              No activities generated for this lesson yet.
-            </p>
-          ) : current ? (
-            <FocusedActivity
-              video={video}
-              parsed={current}
-              completed={completed.has(current.type)}
-              nextLabel={nextUp ? META[nextUp.type].label : null}
-              onComplete={() => markComplete(current.type)}
-              onBack={() => setSelected(null)}
-              onNext={nextUp ? () => setSelected(nextUp.type) : undefined}
-            />
-          ) : (
-            <ActivityMenu
-              parsed={parsed}
-              completed={completed}
-              doneCount={doneCount}
-              allDone={allDone}
-              onPick={setSelected}
-            />
-          )}
-        </div>
-      )}
-    </article>
+  return current ? (
+    <FocusedActivity
+      video={video}
+      parsed={current}
+      completed={completed.has(current.type)}
+      nextLabel={nextUp ? META[nextUp.type].label : null}
+      onComplete={() => markComplete(current.type)}
+      onBack={() => setSelected(null)}
+      onNext={nextUp ? () => setSelected(nextUp.type) : undefined}
+    />
+  ) : (
+    <ActivityMenu
+      parsed={parsed}
+      completed={completed}
+      doneCount={doneCount}
+      allDone={allDone}
+      onPick={setSelected}
+    />
   );
 }
 
