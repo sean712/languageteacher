@@ -328,6 +328,32 @@ rewrites. **Sean still needs to**: set `VITE_SUPABASE_URL` +
 Vercel URL to Supabase Auth Redirect URLs + Site URL (see README). Values are
 in local `.env.local`.
 
+## Learner side (started 2026-06-12)
+
+**Identity is unified**: one Supabase auth user; "creator" = has a `teachers`
+row (`user_id`); learner data keys off `auth.uid()`. A person can be both —
+do NOT build a second auth system.
+
+Slice 1 shipped: `saved_lessons` + `followed_channels` tables (owner-only RLS),
+a **Save** button on `LessonView`, a **Follow** button on the channel header,
+and **`/library`** (RequireAuth) showing followed channels + saved lessons.
+Anonymous users can do all the activities for free; saving/following requires
+an account (redirects to `/login`, then returns) — that's the free/premium
+boundary. Lessons are deep-linkable via `?l=<videoId>` on the teacher page.
+Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
+
+**Roadmap order** (Sean chose "learner foundation" first):
+1. ~~Learner accounts + save/follow + library~~ DONE (slice 1).
+2. **Progress sync** — migrate the per-device `lingua:done:<videoId>` /
+   `lingua:saved:<videoId>` localStorage into account-backed tables when a
+   learner is signed in (merge local → server on login); show progress in
+   `/library`. Next up.
+3. **AI chat about the lesson** — flagship PREMIUM feature; uses the stored
+   transcript + OpenAI; account-gated. The thing that justifies Stripe later.
+4. Note-taking (account-gated).
+5. Then: Google OAuth (public-launch readiness; keep the manual connect path
+   for testing), non-language categories, Stripe.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation
