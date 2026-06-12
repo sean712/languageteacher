@@ -360,10 +360,25 @@ Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
 5. Then: Google OAuth (public-launch readiness; keep the manual connect path
    for testing), non-language categories, Stripe.
 
-**Free vs premium boundary as built:** anonymous = all activities + free-write
-AI feedback (evaluate-sentence is open). Account required = save/follow,
-cross-device progress, AI tutor chat. Stripe will later split account-holders
-into free vs paid; the AI chat is the natural paid feature.
+**Free vs premium boundary (updated 2026-06-12):** the rule is **anything that
+makes an AI/API call is account-gated; static content is free.**
+- Anonymous (free): all the static activities (flashcards, quiz, gap-fill,
+  matching, quick-practice). No account, no API calls.
+- Account-gated: save/follow, cross-device progress, **notes/notebook** (free
+  with an account — notes make no API calls), and the AI features.
+- AI features (account-gated now; the natural **paid** tier once Stripe lands):
+  **free-write feedback** (evaluate-sentence) and **AI tutor chat**
+  (lesson-chat). Both Edge Functions resolve the caller's user and 401 anonymous
+  (verify_jwt=true is NOT enough on its own — the anon key passes it — so each
+  has an in-function `callerUserId` gate). The two AI tiles show an "Account"
+  tag when signed out.
+
+**Notebook (4. — done 2026-06-12):** `notes` table (owner RLS; `video_id`
+optional, `on delete set null`). In-lesson: a Notes button beside Save opens a
+ruled panel (`LessonNotes`) for that lesson. Cross-lesson: `/notebook`
+(`Notebook.tsx`, RequireAuth) is the personal notebook — all notes with
+lesson/channel context + deep-links, edit/delete. `.notebook-paper` ruled
+surface in index.css. Hooks in `lib/notes.ts`. Linked from the Library header.
 
 ## Future / parked ideas
 
