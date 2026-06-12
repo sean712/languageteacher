@@ -55,6 +55,13 @@ The fundamental product brief is in README.md and in memory
   **activity picker** (flashcards, matching, gap-fill, quiz, quick-practice,
   plus **Make it personal**). Completion + saved sentences live in
   `localStorage` (`lingua:done:<videoId>`, `lingua:saved:<videoId>`).
+  LAYOUT (2026-06-12): the teacher page is a **responsive lesson grid** (1/2/3
+  cols, `max-w-5xl`); opening a lesson shows a **focused two-column view**
+  (`LessonView`) with the YouTube video sticky beside the activities on desktop,
+  stacked on mobile. Components: `LessonCard` (grid tile), `LessonView`
+  (two-column), `LessonActivities` (the activity engine — picker/focused
+  activity/completion, exports `parseActivities`/`useCompleted`). The old
+  all-in-one `VideoCard` was removed; `ReviewVideo` uses `LessonView` too.
   NOTE (2026-06-11): **CEFR levels (A1/B1…) are no longer shown** anywhere
   public-facing — the field is still generated/stored but hidden (Sean found it
   unreliable + may expand beyond language learning). **Make it personal now
