@@ -344,15 +344,26 @@ Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
 
 **Roadmap order** (Sean chose "learner foundation" first):
 1. ~~Learner accounts + save/follow + library~~ DONE (slice 1).
-2. **Progress sync** — migrate the per-device `lingua:done:<videoId>` /
-   `lingua:saved:<videoId>` localStorage into account-backed tables when a
-   learner is signed in (merge local → server on login); show progress in
-   `/library`. Next up.
-3. **AI chat about the lesson** — flagship PREMIUM feature; uses the stored
-   transcript + OpenAI; account-gated. The thing that justifies Stripe later.
-4. Note-taking (account-gated).
+2. ~~Progress sync~~ DONE — `lesson_progress` table; `useCompleted` (now in
+   `lib/learner.ts`) is account-aware and merges local↔server; one-time
+   merge-on-login (`lib/progress.ts` → AuthProvider); `/library` shows a
+   "Recently practised" section with done/total badges.
+3. ~~AI chat about the lesson~~ DONE — `lesson-chat` Edge Function
+   (verify_jwt=true **+ in-function user check** — verify_jwt alone accepts the
+   anon key, so the real gate is `callerUserId`). `chatAboutLesson` on the
+   AIProvider seam (Responses API, gpt-5-mini). UI: "Ask the AI tutor" tile in
+   the activity picker (`LessonChat`); anonymous → sign in. **This is the paid
+   tier today (account-gated); Stripe enforcement comes later.** Chat is
+   ephemeral (no history table yet) — a `lesson_chats` table is the obvious
+   next step if persistence is wanted.
+4. Note-taking (account-gated) — not built.
 5. Then: Google OAuth (public-launch readiness; keep the manual connect path
    for testing), non-language categories, Stripe.
+
+**Free vs premium boundary as built:** anonymous = all activities + free-write
+AI feedback (evaluate-sentence is open). Account required = save/follow,
+cross-device progress, AI tutor chat. Stripe will later split account-holders
+into free vs paid; the AI chat is the natural paid feature.
 
 ## Future / parked ideas
 
