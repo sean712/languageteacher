@@ -136,11 +136,10 @@ The fundamental product brief is in README.md and in memory
 - **Channel management (2026-06-11).** ChannelManage has **Re-sync** (re-runs
   `connect-channel` for the teacher's `youtube_channel_id` to discover + queue
   new uploads) and **Remove channel** (owner-only delete, inline confirm; RLS
-  `owner_can_delete_teacher`; FK cascades wipe videos/activities). Hardening
-  TODO: `connect-channel` reuses an existing teacher by `youtube_channel_id`
-  WITHOUT checking the caller owns it — a logged-in user could trigger a sync
-  on someone else's channel (no data leak, but wasted processing). Add an
-  ownership check before re-sync of an already-owned teacher.
+  `owner_can_delete_teacher`; FK cascades wipe videos/activities). The old
+  hardening TODO (anyone could re-sync someone else's teacher) was FIXED
+  2026-07-02: manual connect now 403s when the teacher is owned by another
+  account; only Google-OAuth-proven ownership can (re)claim it.
 - **Onboarding reveal (2026-06-12).** `/connect` is a two-part wizard: a form
   (channel + **category** picker + **target-audience** level) then a staged
   "magical" reveal — Finding (channel "Found" card) → Importing (real
@@ -356,9 +355,11 @@ Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
    tier today (account-gated); Stripe enforcement comes later.** Chat is
    ephemeral (no history table yet) — a `lesson_chats` table is the obvious
    next step if persistence is wanted.
-4. Note-taking (account-gated) — not built.
-5. Then: Google OAuth (public-launch readiness; keep the manual connect path
-   for testing), non-language categories, Stripe.
+4. ~~Note-taking~~ DONE — see "Notebook" below.
+5. ~~Google OAuth~~ BUILT 2026-07-02 (see "Google OAuth" section) — awaiting
+   Sean's Google Cloud / Supabase dashboard configuration to go live. Manual
+   connect path kept for testing.
+6. Then: non-language categories, Stripe.
 
 **Free vs premium boundary (updated 2026-06-12):** the rule is **anything that
 makes an AI/API call is account-gated; static content is free.**
@@ -379,6 +380,58 @@ ruled panel (`LessonNotes`) for that lesson. Cross-lesson: `/notebook`
 (`Notebook.tsx`, RequireAuth) is the personal notebook — all notes with
 lesson/channel context + deep-links, edit/delete. `.notebook-paper` ruled
 surface in index.css. Hooks in `lib/notes.ts`. Linked from the Library header.
+
+## Google OAuth (built 2026-07-02, config pending)
+
+Two flavours of the same Supabase Google provider flow (`lib/google.ts`):
+
+- **Learner sign-in**: "Continue with Google" on `/login` — basic scopes,
+  plain `signInWithOAuth`. Magic-link email stays as the alternative.
+- **Creator channel link**: "Link with Google" on `/connect` — adds scopes
+  `youtube.readonly` (channel discovery via `channels.list mine=true`, which
+  PROVES ownership) + `youtube.force-ssl` (`captions.download`, owner-only),
+  with `access_type=offline&prompt=consent` so Google issues a refresh token.
+
+Token plumbing: Supabase exposes `provider_token`/`provider_refresh_token` to
+the browser ONLY on the session created by the redirect; `storeProviderTokens`
+posts them to the `store-google-token` Edge Function (called from both
+AuthProvider and the Connect return leg — idempotent upsert), which writes
+`google_oauth_tokens` (RLS enabled, NO policies → service-role only; browser
+can never read a token back). `_shared/google-oauth.ts` refreshes access
+tokens server-side (needs `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` function
+secrets); a revoked grant (`invalid_grant`) deletes the row so the pipeline
+falls back gracefully.
+
+Connect flow: `/connect` Google card stashes category/audience/display-name in
+sessionStorage, round-trips to Google, returns to `/connect?via=google`, then
+calls `connect-channel` with `{ via: 'google' }` — the server resolves the
+channel from the caller's own token (`resolveOwnChannel`), stamps
+`teachers.oauth_verified_at`, and reassigns a squatted teacher to the proven
+owner. Manual path unchanged (but now 403s on someone else's teacher).
+
+Captions: `_shared/official-captions-provider.ts` (captions.list → pick
+manual track over ASR → captions.download tfmt=srt) is prepended to the
+transcript chain in `processVideoRow` whenever the video's teacher has a
+stored token. This is the best-quality transcript source AND the sanctioned
+(ToS-clean) one. Quota: list=50 + download=200 units per video from the
+default 10k/day pool — request a bump before scale.
+
+**Sean must configure before it works** (placeholders are fine in code; set
+secrets directly in the dashboards):
+1. Google Cloud Console (same project as the YouTube API key): create an
+   OAuth 2.0 Client ID (Web application) with authorized redirect URI
+   `https://nyekhfvkaujfrfulofmg.supabase.co/auth/v1/callback`.
+2. OAuth consent screen: add the two YouTube scopes; add himself as a test
+   user. Testing mode is fine pre-launch; the YouTube scopes are *sensitive*,
+   so public launch needs Google's app verification — start early.
+3. Supabase Dashboard → Authentication → Sign In / Providers → Google:
+   enable, paste client ID + secret.
+4. Edge Function secrets: `supabase secrets set GOOGLE_CLIENT_ID=…
+   GOOGLE_CLIENT_SECRET=…` (or dashboard → Edge Functions → Secrets).
+
+Deployed 2026-07-02: `store-google-token` v1 (new), `connect-channel` v4,
+`process-videos` v6, `sync-channel` v3. Migration `google_oauth_tokens`
+applied. Auth gates smoke-tested (anon → 401 on both new paths).
 
 ## Future / parked ideas
 

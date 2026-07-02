@@ -22,6 +22,22 @@ export interface ResolvedChannel {
   thumbnailUrl: string;
 }
 
+// deno-lint-ignore no-explicit-any
+function shapeChannel(item: any): ResolvedChannel {
+  const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploads) throw new Error(`No uploads playlist for ${item.id}`);
+  return {
+    channelId: item.id,
+    uploadsPlaylistId: uploads,
+    title: item.snippet?.title ?? 'Channel',
+    thumbnailUrl:
+      item.snippet?.thumbnails?.high?.url ??
+      item.snippet?.thumbnails?.medium?.url ??
+      item.snippet?.thumbnails?.default?.url ??
+      '',
+  };
+}
+
 export class YouTubeClient {
   constructor(private apiKey: string) {}
 
@@ -69,18 +85,26 @@ export class YouTubeClient {
     );
     const item = data.items?.[0];
     if (!item) throw new Error(`Channel ${channelId} not found`);
-    const uploads = item.contentDetails?.relatedPlaylists?.uploads;
-    if (!uploads) throw new Error(`No uploads playlist for ${channelId}`);
-    return {
-      channelId: channelId!,
-      uploadsPlaylistId: uploads,
-      title: item.snippet?.title ?? 'Channel',
-      thumbnailUrl:
-        item.snippet?.thumbnails?.high?.url ??
-        item.snippet?.thumbnails?.medium?.url ??
-        item.snippet?.thumbnails?.default?.url ??
-        '',
-    };
+    return shapeChannel(item);
+  }
+
+  // Resolve the channel OWNED by the given Google OAuth token
+  // (channels.list mine=true). Returning a channel is proof of ownership —
+  // the caller can trust it for claiming/verifying a teacher.
+  async resolveOwnChannel(accessToken: string): Promise<ResolvedChannel> {
+    const res = await fetch(
+      `${API_BASE}/channels?part=snippet,contentDetails&mine=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      throw new Error(`YouTube API ${res.status}: ${await res.text()}`);
+    }
+    const data = await res.json();
+    const item = data.items?.[0];
+    if (!item) {
+      throw new Error('This Google account has no YouTube channel.');
+    }
+    return shapeChannel(item);
   }
 
   // deno-lint-ignore no-explicit-any

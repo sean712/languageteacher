@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
+import { signInWithGoogle, storeProviderTokens } from '../lib/google';
 import CreatorHeader from '../components/CreatorHeader';
 
 interface ConnectResult {
@@ -50,8 +52,16 @@ const POLL_MS = 4000;
 const MAX_POLLS = 90; // ~6 minutes
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Form choices stashed across the Google OAuth round-trip (the redirect to
+// Google unloads the page, so React state doesn't survive).
+const GOOGLE_STASH_KEY = 'lingua:connect-google';
+
 export default function Connect() {
   const navigate = useNavigate();
+  const { session, loading: authLoading } = useAuth();
+  const [params] = useSearchParams();
+  const returningFromGoogle = params.get('via') === 'google';
+  const googleRan = useRef(false);
   const [channel, setChannel] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -82,9 +92,15 @@ export default function Connect() {
     return (data ?? []) as PreviewVideo[];
   };
 
-  const run = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!channel.trim() || !category || !audience) return;
+  // Shared connect flow. `body` is either { channel, display_name? } (manual)
+  // or { via: 'google', display_name? }. Category/audience come as arguments
+  // because the Google return leg restores them from sessionStorage and can't
+  // rely on state having flushed.
+  const runConnect = async (
+    body: Record<string, unknown>,
+    cat: string | null,
+    aud: string | null,
+  ) => {
     cancelled.current = false;
     setError(null);
     setPhase('reveal');
@@ -92,7 +108,7 @@ export default function Connect() {
 
     // Stage 1 — find the channel (real resolve + index happens here).
     const { data, error: connErr } = await supabase.functions.invoke('connect-channel', {
-      body: { channel: channel.trim(), display_name: displayName.trim() || undefined },
+      body,
     });
     if (cancelled.current) return;
     const res = data as (ConnectResult & { error?: string }) | null;
@@ -104,10 +120,12 @@ export default function Connect() {
     setResult(res);
 
     // Persist category + audience (owner update via RLS); fetch the avatar.
-    await supabase
-      .from('teachers')
-      .update({ category, target_audience: { level: audience } })
-      .eq('id', res.teacher_id);
+    if (cat && aud) {
+      await supabase
+        .from('teachers')
+        .update({ category: cat, target_audience: { level: aud } })
+        .eq('id', res.teacher_id);
+    }
     const { data: t } = await supabase
       .from('teachers')
       .select('avatar_url')
@@ -145,6 +163,64 @@ export default function Connect() {
     if (!cancelled.current) setStage('done');
   };
 
+  const run = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!channel.trim() || !category || !audience) return;
+    void runConnect(
+      { channel: channel.trim(), display_name: displayName.trim() || undefined },
+      category,
+      audience,
+    );
+  };
+
+  // Google path, departure leg: stash the form choices (the redirect unloads
+  // the page), then send the creator to Google's consent screen with YouTube
+  // scopes. They come back to /connect?via=google.
+  const linkWithGoogle = async () => {
+    if (!category || !audience) {
+      setError('Pick a category and audience first — then link with Google.');
+      setPhase('error');
+      return;
+    }
+    sessionStorage.setItem(
+      GOOGLE_STASH_KEY,
+      JSON.stringify({ category, audience, displayName: displayName.trim() }),
+    );
+    const { error: err } = await signInWithGoogle('/connect?via=google', {
+      youtube: true,
+    });
+    if (err) {
+      setError(err.message);
+      setPhase('error');
+    }
+  };
+
+  // Google path, return leg: persist the provider tokens server-side, then
+  // connect using them (the server finds the channel via mine=true — no
+  // typing, and ownership is proven).
+  useEffect(() => {
+    if (!returningFromGoogle || googleRan.current || authLoading || !session) {
+      return;
+    }
+    googleRan.current = true;
+    const stash = JSON.parse(
+      sessionStorage.getItem(GOOGLE_STASH_KEY) ?? '{}',
+    ) as { category?: string; audience?: string; displayName?: string };
+    sessionStorage.removeItem(GOOGLE_STASH_KEY);
+    if (stash.category) setCategory(stash.category);
+    if (stash.audience) setAudience(stash.audience);
+    if (stash.displayName) setDisplayName(stash.displayName);
+    void (async () => {
+      await storeProviderTokens(session);
+      await runConnect(
+        { via: 'google', display_name: stash.displayName || undefined },
+        stash.category ?? null,
+        stash.audience ?? null,
+      );
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when the session lands
+  }, [returningFromGoogle, authLoading, session]);
+
   const goToPage = () => result && navigate(`/${result.teacher_slug}`);
   const goToDashboard = () => result && navigate(`/dashboard/${result.teacher_slug}`);
 
@@ -164,6 +240,7 @@ export default function Connect() {
             setAudience={setAudience}
             error={phase === 'error' ? error : null}
             onSubmit={run}
+            onGoogle={linkWithGoogle}
           />
         ) : (
           <Reveal
@@ -185,7 +262,7 @@ export default function Connect() {
 
 function ConnectForm({
   channel, setChannel, displayName, setDisplayName,
-  category, setCategory, audience, setAudience, error, onSubmit,
+  category, setCategory, audience, setAudience, error, onSubmit, onGoogle,
 }: {
   channel: string; setChannel: (v: string) => void;
   displayName: string; setDisplayName: (v: string) => void;
@@ -193,6 +270,7 @@ function ConnectForm({
   audience: string | null; setAudience: (v: string) => void;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
+  onGoogle: () => void;
 }) {
   const ready = channel.trim() && category && audience;
   return (
@@ -208,21 +286,7 @@ function ConnectForm({
         interactive lessons — automatically.
       </p>
 
-      <label className="block mt-8">
-        <span className="text-sm font-medium">YouTube channel</span>
-        <input
-          value={channel}
-          onChange={(e) => setChannel(e.target.value)}
-          placeholder="@handle or youtube.com/@handle"
-          autoCapitalize="off" autoCorrect="off" spellCheck={false}
-          className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
-        />
-        <span className="block text-xs text-ink-400 mt-1.5">
-          Use the channel’s @handle or URL — a name can match the wrong channel.
-        </span>
-      </label>
-
-      <fieldset className="mt-6">
+      <fieldset className="mt-8">
         <legend className="text-sm font-medium">What’s your channel about?</legend>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
           {CATEGORIES.map((c) => (
@@ -286,12 +350,60 @@ function ConnectForm({
 
       {error && <p className="text-sm text-red-700 mt-5">{error}</p>}
 
+      {/* Primary path: Google proves channel ownership and unlocks the
+          creator's own caption tracks — the best transcripts we can get. */}
+      <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
+        <h2 className="font-medium">Link with Google</h2>
+        <p className="text-sm text-ink-600 mt-1 leading-relaxed">
+          Sign in with the Google account that owns your channel — we’ll find
+          it automatically, verify it’s yours, and use your real caption
+          tracks for the most accurate lessons.
+        </p>
+        <button
+          type="button"
+          onClick={onGoogle}
+          disabled={!category || !audience}
+          className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
+        >
+          <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>
+            <path fill="#fff" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" opacity=".9"/>
+            <path fill="#fff" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48zM10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19zM24 9.5c3.54 0 6.7 1.22 9.19 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" opacity=".9"/>
+          </svg>
+          ✨ Connect my channel
+        </button>
+        {(!category || !audience) && (
+          <p className="text-xs text-ink-400 mt-2">
+            Choose a category and audience above first.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-6 flex items-center gap-3 text-xs text-ink-400">
+        <span className="h-px flex-1 bg-paper-300" />
+        or add it manually
+        <span className="h-px flex-1 bg-paper-300" />
+      </div>
+
+      <label className="block mt-5">
+        <span className="text-sm font-medium">YouTube channel</span>
+        <input
+          value={channel}
+          onChange={(e) => setChannel(e.target.value)}
+          placeholder="@handle or youtube.com/@handle"
+          autoCapitalize="off" autoCorrect="off" spellCheck={false}
+          className="mt-1.5 w-full rounded-xl border border-paper-300 bg-paper-50 px-4 py-3 text-[0.95rem] focus:outline-none focus:border-ink-400"
+        />
+        <span className="block text-xs text-ink-400 mt-1.5">
+          Use the channel’s @handle or URL — a name can match the wrong channel.
+        </span>
+      </label>
+
       <button
         type="submit"
         disabled={!ready}
-        className="mt-7 w-full sm:w-auto inline-flex items-center justify-center px-7 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
+        className="mt-5 w-full sm:w-auto inline-flex items-center justify-center px-7 py-3.5 rounded-xl border border-ink-900 text-ink-900 font-medium hover:bg-ink-900 hover:text-paper-50 transition-colors disabled:opacity-40"
       >
-        ✨ Bring it to life
+        Bring it to life
       </button>
       <p className="text-xs text-ink-400 mt-3">
         Testing tip: try{' '}

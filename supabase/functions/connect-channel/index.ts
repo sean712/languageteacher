@@ -2,20 +2,30 @@
 //
 // POST /functions/v1/connect-channel
 // body: { channel: "<id | url | @handle | name>", display_name?: string }
+//   or: { via: 'google', display_name?: string }
 // → { teacher_slug, channel_title, channel_video_count, queued_now, queue_depth }
 //
-// Resolves the channel, upserts a teacher record, and indexes the catalogue
-// (queuing the latest videos for processing). Processing itself is drained by
-// process-videos. Called from the browser, so it handles CORS.
+// Two connect paths into the same records:
+//  - manual: resolve the typed id/@handle via the API key. No ownership
+//    proof, so a channel already claimed by another account is refused.
+//    Kept for testing (per HANDOVER).
+//  - google: look the channel up with the caller's stored Google OAuth token
+//    (channels.list mine=true). That PROVES ownership — we stamp
+//    oauth_verified_at and will reassign a squatted teacher to the verified
+//    owner. Also unlocks official captions downloads in the pipeline.
+//
+// Then upserts a teacher record and indexes the catalogue (queuing the
+// latest videos for processing; drained by process-videos). Browser-called,
+// so it handles CORS.
 //
 // Auth: deployed with verify_jwt=true, so only a logged-in creator can call
 // it. We read their user id from the JWT and stamp it on the teacher they
 // create (teacher.user_id), which is what the RLS owner policies key off.
-// Later, Google/YouTube OAuth becomes an additional connect path into the same
-// records. Still triggers paid processing — keep an eye on abuse once public.
+// Still triggers paid processing — keep an eye on abuse once public.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.107.0';
 import { YouTubeClient } from '../_shared/youtube.ts';
+import { getAccessTokenForUser } from '../_shared/google-oauth.ts';
 import { syncCatalogue, type TeacherRow } from '../_shared/pipeline.ts';
 
 const CORS = {
@@ -87,9 +97,11 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({})) as {
       channel?: string;
       display_name?: string;
+      via?: 'google';
     };
+    const viaGoogle = body.via === 'google';
     const channelInput = (body.channel ?? '').trim();
-    if (!channelInput) {
+    if (!viaGoogle && !channelInput) {
       return json({ error: 'Enter a channel ID, URL or @handle.' }, 400);
     }
 
@@ -104,13 +116,34 @@ Deno.serve(async (req: Request) => {
     const yt = new YouTubeClient(YT_API_KEY);
 
     let resolved;
-    try {
-      resolved = await yt.resolveChannel(channelInput);
-    } catch (err) {
-      return json(
-        { error: `Couldn't find that channel — check the ID or @handle. (${String(err).slice(0, 120)})` },
-        404,
-      );
+    if (viaGoogle) {
+      // Ownership-proving path: find the channel the caller's own Google
+      // token can see (mine=true). Requires a token stored by
+      // store-google-token after the YouTube-scoped sign-in.
+      const accessToken = await getAccessTokenForUser(supabase, userId);
+      if (!accessToken) {
+        return json(
+          { error: 'No Google connection found — use "Link with Google" to authorise YouTube access first.' },
+          400,
+        );
+      }
+      try {
+        resolved = await yt.resolveOwnChannel(accessToken);
+      } catch (err) {
+        return json(
+          { error: `Couldn't read your channel from Google: ${String(err).slice(0, 150)}` },
+          400,
+        );
+      }
+    } else {
+      try {
+        resolved = await yt.resolveChannel(channelInput);
+      } catch (err) {
+        return json(
+          { error: `Couldn't find that channel — check the ID or @handle. (${String(err).slice(0, 120)})` },
+          404,
+        );
+      }
     }
 
     // Re-connecting an already-linked channel reuses its teacher.
@@ -122,14 +155,26 @@ Deno.serve(async (req: Request) => {
 
     let teacher: TeacherRow;
     if (existing) {
+      const owner = (existing as { user_id: string | null }).user_id;
+      // Without OAuth proof, only the current owner may re-sync a claimed
+      // channel. WITH proof, Google says the caller owns it — so a teacher
+      // claimed by any other account was squatted and moves to the caller.
+      if (owner && owner !== userId && !viaGoogle) {
+        return json(
+          { error: 'This channel is already connected by another account. Link with Google to prove ownership and claim it.' },
+          403,
+        );
+      }
       teacher = existing as TeacherRow;
       const patch: Record<string, unknown> = {};
       if (!teacher.uploads_playlist_id) {
         patch.uploads_playlist_id = resolved.uploadsPlaylistId;
       }
-      // Claim an unowned channel (e.g. the seeded demo) for this creator.
-      if (!(existing as { user_id: string | null }).user_id) {
+      if (owner !== userId) {
         patch.user_id = userId;
+      }
+      if (viaGoogle) {
+        patch.oauth_verified_at = new Date().toISOString();
       }
       if (Object.keys(patch).length) {
         await supabase.from('teachers').update(patch).eq('id', teacher.id);
@@ -147,6 +192,7 @@ Deno.serve(async (req: Request) => {
           uploads_playlist_id: resolved.uploadsPlaylistId,
           avatar_url: resolved.thumbnailUrl || null,
           bio: 'Auto-generated lessons from a linked YouTube channel.',
+          oauth_verified_at: viaGoogle ? new Date().toISOString() : null,
         })
         .select('id,slug,uploads_playlist_id,last_synced_at')
         .single();

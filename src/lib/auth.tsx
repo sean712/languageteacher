@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { storeProviderTokens } from './google';
 import { syncLocalProgressToServer } from './progress';
 
 interface AuthState {
@@ -31,6 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      // A Google sign-in that requested YouTube access carries provider
+      // tokens on exactly this one session — persist them server-side now
+      // (no-op for every other sign-in; see lib/google.ts).
+      void storeProviderTokens(s);
     });
     return () => sub.subscription.unsubscribe();
   }, []);

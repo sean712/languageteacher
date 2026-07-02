@@ -7,6 +7,8 @@ import { getAIProvider } from './provider-factory.ts';
 import { AIProviderError } from './ai-types.ts';
 import { fetchTranscriptViaChain } from './transcript-factory.ts';
 import type { TranscriptProvider } from './transcript-types.ts';
+import { OfficialCaptionsProvider } from './official-captions-provider.ts';
+import { getAccessTokenForTeacher } from './google-oauth.ts';
 import { YouTubeClient } from './youtube.ts';
 
 // --- Phase 1 hardcoded constants. Move to channel/teacher rows in Phase 2. ---
@@ -25,6 +27,7 @@ export interface PushedTranscript {
 
 export interface VideoRow {
   id: string;
+  teacher_id: string;
   youtube_video_id: string;
   title: string | null;
   duration_seconds: number | null;
@@ -195,7 +198,8 @@ export async function processVideoRow(args: {
 
   // 1. transcript. Priority: a teacher-uploaded transcript already on the row
   // (authoritative — never refetch/overwrite it) > a pushed transcript > the
-  // provider chain.
+  // provider chain. When the teacher linked via Google OAuth, their official
+  // caption tracks lead the chain (owner-authorised, best quality).
   let transcript = '';
   let transcriptSource: 'captions' | 'whisper' | 'upload' | 'none' = 'none';
   let language: string | undefined;
@@ -210,7 +214,15 @@ export async function processVideoRow(args: {
     language = pushed.language;
     transcriptDiag = 'pushed';
   } else {
-    const outcome = await fetchTranscriptViaChain(transcriptProviders, row.youtube_video_id);
+    let chain = transcriptProviders;
+    try {
+      const token = await getAccessTokenForTeacher(supabase, row.teacher_id);
+      if (token) chain = [new OfficialCaptionsProvider(token), ...chain];
+    } catch (err) {
+      // Token trouble must not sink processing — fall through to the chain.
+      console.warn(`official captions unavailable for teacher ${row.teacher_id}`, err);
+    }
+    const outcome = await fetchTranscriptViaChain(chain, row.youtube_video_id);
     transcriptDiag = outcome.diag;
     if (outcome.result) {
       transcript = outcome.result.text;
