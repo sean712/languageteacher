@@ -7,6 +7,13 @@ he writes detailed briefs and prefers execution over re-litigation.
 The fundamental product brief is in README.md and in memory
 (`project_overview.md`). What follows is current state, not goals.
 
+**What's next lives in `ROADMAP.md`** (drafted 2026-07-12 from Sean's Phase 3
+brief): Stripe subscriptions + creator revenue sharing, agentic quality
+checking + error flagging, creator-specified target language + travel/immersion
+content support, account/subscription management (Stripe-hosted pages), Resend
+email, and a creator stats dashboard. Read this file for where we are, then
+ROADMAP.md for what to build and in what order.
+
 ## What's live
 
 - **Supabase project** `languageteacher` (ref `nyekhfvkaujfrfulofmg`, eu-west-2)
@@ -359,7 +366,10 @@ Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
 5. ~~Google OAuth~~ BUILT 2026-07-02 (see "Google OAuth" section) — awaiting
    Sean's Google Cloud / Supabase dashboard configuration to go live. Manual
    connect path kept for testing.
-6. Then: non-language categories, Stripe.
+6. Then: **Phase 3 — see `ROADMAP.md`** (Stripe + rev share, agentic QA +
+   error flagging, target language + travel content, account management,
+   Resend, creator stats). Supersedes the old "non-language categories,
+   Stripe" placeholder.
 
 **Free vs premium boundary (updated 2026-06-12):** the rule is **anything that
 makes an AI/API call is account-gated; static content is free.**
@@ -456,8 +466,10 @@ applied. Auth gates smoke-tested (anon → 401 on both new paths).
 - He writes detailed briefs and wants execution + clear flags, not
   re-litigation of decided architecture.
 
-## Git state
+## Git state (updated 2026-07-12)
 
-`git init` was run, no commit yet. ~30 files staged. Worth committing
-before any new direction — pre-handover snapshot. Don't auto-commit;
-ask Sean first.
+The repo lives at `sean712/languageteacher` on GitHub. `main` holds the full
+history through Google OAuth (2026-07-02). Active work branch:
+`claude/project-handover-roadmap-yy8it2` (this handover/roadmap update).
+Migrations in `supabase/migrations/` are reference copies — the source of
+truth is what's applied on the Supabase project via the MCP.
