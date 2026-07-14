@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { signInWithGoogle, storeProviderTokens } from '../lib/google';
 import CreatorHeader from '../components/CreatorHeader';
+import LanguageInput from '../components/LanguageInput';
 
 interface ConnectResult {
   teacher_slug: string;
@@ -66,6 +67,7 @@ export default function Connect() {
   const [displayName, setDisplayName] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [audience, setAudience] = useState<string | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState('');
 
   const [phase, setPhase] = useState<Phase>('form');
   const [stage, setStage] = useState<Stage>('finding');
@@ -163,11 +165,20 @@ export default function Connect() {
     if (!cancelled.current) setStage('done');
   };
 
+  // The language category requires the teaching language — it's what the AI
+  // pins generation to (teachers.target_language), so connecting without it
+  // would silently fall back to detection.
+  const needsLanguage = category === 'language' && !targetLanguage.trim();
+
   const run = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!channel.trim() || !category || !audience) return;
+    if (!channel.trim() || !category || !audience || needsLanguage) return;
     void runConnect(
-      { channel: channel.trim(), display_name: displayName.trim() || undefined },
+      {
+        channel: channel.trim(),
+        display_name: displayName.trim() || undefined,
+        target_language: targetLanguage.trim() || undefined,
+      },
       category,
       audience,
     );
@@ -177,14 +188,23 @@ export default function Connect() {
   // the page), then send the creator to Google's consent screen with YouTube
   // scopes. They come back to /connect?via=google.
   const linkWithGoogle = async () => {
-    if (!category || !audience) {
-      setError('Pick a category and audience first — then link with Google.');
+    if (!category || !audience || needsLanguage) {
+      setError(
+        needsLanguage
+          ? 'Tell us which language you teach first — then link with Google.'
+          : 'Pick a category and audience first — then link with Google.',
+      );
       setPhase('error');
       return;
     }
     sessionStorage.setItem(
       GOOGLE_STASH_KEY,
-      JSON.stringify({ category, audience, displayName: displayName.trim() }),
+      JSON.stringify({
+        category,
+        audience,
+        displayName: displayName.trim(),
+        targetLanguage: targetLanguage.trim(),
+      }),
     );
     const { error: err } = await signInWithGoogle('/connect?via=google', {
       youtube: true,
@@ -205,15 +225,25 @@ export default function Connect() {
     googleRan.current = true;
     const stash = JSON.parse(
       sessionStorage.getItem(GOOGLE_STASH_KEY) ?? '{}',
-    ) as { category?: string; audience?: string; displayName?: string };
+    ) as {
+      category?: string;
+      audience?: string;
+      displayName?: string;
+      targetLanguage?: string;
+    };
     sessionStorage.removeItem(GOOGLE_STASH_KEY);
     if (stash.category) setCategory(stash.category);
     if (stash.audience) setAudience(stash.audience);
     if (stash.displayName) setDisplayName(stash.displayName);
+    if (stash.targetLanguage) setTargetLanguage(stash.targetLanguage);
     void (async () => {
       await storeProviderTokens(session);
       await runConnect(
-        { via: 'google', display_name: stash.displayName || undefined },
+        {
+          via: 'google',
+          display_name: stash.displayName || undefined,
+          target_language: stash.targetLanguage || undefined,
+        },
         stash.category ?? null,
         stash.audience ?? null,
       );
@@ -238,6 +268,8 @@ export default function Connect() {
             setCategory={setCategory}
             audience={audience}
             setAudience={setAudience}
+            targetLanguage={targetLanguage}
+            setTargetLanguage={setTargetLanguage}
             error={phase === 'error' ? error : null}
             onSubmit={run}
             onGoogle={linkWithGoogle}
@@ -262,17 +294,21 @@ export default function Connect() {
 
 function ConnectForm({
   channel, setChannel, displayName, setDisplayName,
-  category, setCategory, audience, setAudience, error, onSubmit, onGoogle,
+  category, setCategory, audience, setAudience,
+  targetLanguage, setTargetLanguage, error, onSubmit, onGoogle,
 }: {
   channel: string; setChannel: (v: string) => void;
   displayName: string; setDisplayName: (v: string) => void;
   category: string | null; setCategory: (v: string) => void;
   audience: string | null; setAudience: (v: string) => void;
+  targetLanguage: string; setTargetLanguage: (v: string) => void;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
   onGoogle: () => void;
 }) {
-  const ready = channel.trim() && category && audience;
+  const languageMissing = category === 'language' && !targetLanguage.trim();
+  const choicesReady = Boolean(category && audience) && !languageMissing;
+  const ready = channel.trim() && choicesReady;
   return (
     <form onSubmit={onSubmit} className="animate-rise">
       <span className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">
@@ -313,6 +349,16 @@ function ConnectForm({
             We’re starting with language learning — tailored lesson types for this
             category are coming soon, and we’ll set you up first.
           </p>
+        )}
+        {category === 'language' && (
+          <label className="block mt-4 animate-rise">
+            <span className="text-sm font-medium">Which language do you teach?</span>
+            <LanguageInput value={targetLanguage} onChange={setTargetLanguage} />
+            <span className="block text-xs text-ink-400 mt-1.5">
+              Lessons are built in this language — even from videos where you
+              mostly speak English.
+            </span>
+          </label>
         )}
       </fieldset>
 
@@ -362,7 +408,7 @@ function ConnectForm({
         <button
           type="button"
           onClick={onGoogle}
-          disabled={!category || !audience}
+          disabled={!choicesReady}
           className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-emerald-600 text-paper-50 font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40"
         >
           <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>
@@ -371,9 +417,11 @@ function ConnectForm({
           </svg>
           ✨ Connect my channel
         </button>
-        {(!category || !audience) && (
+        {!choicesReady && (
           <p className="text-xs text-ink-400 mt-2">
-            Choose a category and audience above first.
+            {languageMissing
+              ? 'Tell us which language you teach above first.'
+              : 'Choose a category and audience above first.'}
           </p>
         )}
       </div>

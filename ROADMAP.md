@@ -65,7 +65,12 @@ Dependencies drive this order, not importance:
 
 ## Workstream A — Target language + travel/immersion content
 
-### A1. Creator specifies the language they teach
+### A1. Creator specifies the language they teach — BUILT 2026-07-14
+
+Code complete on all points below; the Supabase apply steps (migration +
+redeploy of connect-channel/process-videos) were blocked on MCP approval in
+the build session — see the "Target language" section of HANDOVER.md for the
+exact pending steps and deploy order.
 
 Today the pipeline *detects* the language from the transcript
 (`detectLanguageAndLevel` in `pipeline.ts` → `processVideoRow`). That fails

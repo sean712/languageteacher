@@ -241,28 +241,42 @@ export async function processVideoRow(args: {
     return { status: 'needs_review', diag: `transcript_fetch: ${transcriptDiag}` };
   }
 
-  // 2. detection + generation
+  // 2. detection + generation. A teacher-declared target_language is
+  // authoritative: it skips the detection call entirely (one less OpenAI call
+  // per video) and pins the taught language regardless of transcript noise.
+  const { data: teacherRow } = await supabase
+    .from('teachers')
+    .select('target_language')
+    .eq('id', row.teacher_id)
+    .maybeSingle();
+  const targetLanguage =
+    ((teacherRow as { target_language: string | null } | null)
+      ?.target_language ?? '').trim() || undefined;
+
   let bundleConfidence = 0;
   let bundleLevel = 'A2';
-  let bundleLanguage = language ?? 'unknown';
+  let bundleLanguage = targetLanguage ?? language ?? 'unknown';
   let reviewNotes: string[] | undefined;
   let activities: Array<{ type: string; payload: Record<string, unknown> }> = [];
 
   try {
-    const detected = await ai.detectLanguageAndLevel(transcript);
-    bundleLanguage = detected.language || bundleLanguage;
-    bundleLevel = detected.level || bundleLevel;
+    if (!targetLanguage) {
+      const detected = await ai.detectLanguageAndLevel(transcript);
+      bundleLanguage = detected.language || bundleLanguage;
+      bundleLevel = detected.level || bundleLevel;
+    }
 
     const bundle = await ai.generateActivities({
       transcript,
       language: bundleLanguage,
       level: bundleLevel,
+      target_language: targetLanguage,
       video_type: isShort ? 'short' : 'long',
       title: row.title ?? undefined,
     });
     bundleConfidence = bundle.confidence;
     bundleLevel = bundle.level;
-    bundleLanguage = bundle.language;
+    bundleLanguage = targetLanguage ?? bundle.language;
     reviewNotes = bundle.needs_review_notes;
     activities = bundle.activities.map((a) => ({ type: a.type, payload: a.payload }));
   } catch (err) {

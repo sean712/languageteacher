@@ -443,6 +443,42 @@ Deployed 2026-07-02: `store-google-token` v1 (new), `connect-channel` v4,
 `process-videos` v6, `sync-channel` v3. Migration `google_oauth_tokens`
 applied. Auth gates smoke-tested (anon → 401 on both new paths).
 
+## Target language (Workstream A1, built 2026-07-14 — APPLY STEPS PENDING)
+
+Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
+
+- `teachers.target_language` (English name, e.g. 'Welsh') + `content_mode`
+  ('teaching'|'immersion', default 'teaching' — column only, wired in A2).
+  Migration file: `supabase/migrations/20260714_teacher_target_language.sql`.
+- `/connect`: picking the **language** category reveals a required "Which
+  language do you teach?" input (`LanguageInput` — datalist over
+  `src/lib/languages.ts`, free text allowed for low-resource languages).
+  Survives the Google round-trip via the sessionStorage stash; sent in the
+  `connect-channel` body on both paths so it's stored BEFORE videos queue.
+- `connect-channel`: accepts `target_language` (trimmed, ≤60 chars); stamps it
+  on insert and on reconnect-patch. Absent/empty never clears an existing
+  value (so ChannelManage Re-sync can't clobber it).
+- `ChannelManage`: "Teaching language" card (shown when category is language
+  or unset, with a "Not set" nudge badge) — edit + save via owner RLS. Copy
+  tells creators existing lessons need Regenerate to pick it up.
+- Pipeline (`processVideoRow`): reads the teacher's `target_language`; when
+  set it **skips the detectLanguageAndLevel call** (one less OpenAI call per
+  video) and passes `target_language` to `generateActivities`; the stored
+  `videos.language` is pinned to it. Prompt rule 5 becomes authoritative
+  ("never override based on your own detection; too little usable material →
+  low confidence, not a language switch") — this is also the hook A2's
+  immersion mode will extend.
+
+**PENDING (Supabase MCP calls needed approval this session and couldn't run):**
+1. Apply migration `teacher_target_language` (SQL in the file above).
+2. Redeploy `connect-channel` (→v5, verify_jwt=true) and `process-videos`
+   (→v7, verify_jwt=false) — usual full-file-set deploy via MCP.
+3. Deploy order: migration FIRST, then functions, then the frontend (the
+   ChannelManage save writes the new column and would 400 without it; the
+   old function version just ignores the extra body field, harmless).
+4. Optional backfill once applied: demo teacher → 'Welsh', the Irish channel
+   (`UCuEia7cE8Wm8yMCPMFT5CbA`) → 'Irish'; then Regenerate to see the lift.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation
