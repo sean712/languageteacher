@@ -65,12 +65,12 @@ Dependencies drive this order, not importance:
 
 ## Workstream A — Target language + travel/immersion content
 
-### A1. Creator specifies the language they teach — BUILT 2026-07-14
+### A1. Creator specifies the language they teach — SHIPPED 2026-07-16
 
-Code complete on all points below; the Supabase apply steps (migration +
-redeploy of connect-channel/process-videos) were blocked on MCP approval in
-the build session — see the "Target language" section of HANDOVER.md for the
-exact pending steps and deploy order.
+Code complete and deployed: migration `teacher_target_language` applied,
+`connect-channel` v5 + `process-videos` v7 live. Only the frontend deploy
+(merge branch → main → Vercel) remains to expose the UI. See the "Target
+language" section of HANDOVER.md.
 
 Today the pipeline *detects* the language from the transcript
 (`detectLanguageAndLevel` in `pipeline.ts` → `processVideoRow`). That fails

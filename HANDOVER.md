@@ -443,7 +443,7 @@ Deployed 2026-07-02: `store-google-token` v1 (new), `connect-channel` v4,
 `process-videos` v6, `sync-channel` v3. Migration `google_oauth_tokens`
 applied. Auth gates smoke-tested (anon → 401 on both new paths).
 
-## Target language (Workstream A1, built 2026-07-14 — APPLY STEPS PENDING)
+## Target language (Workstream A1, built 2026-07-14 — DEPLOYED 2026-07-16)
 
 Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
 
@@ -469,15 +469,27 @@ Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
   low confidence, not a language switch") — this is also the hook A2's
   immersion mode will extend.
 
-**PENDING (Supabase MCP calls needed approval this session and couldn't run):**
-1. Apply migration `teacher_target_language` (SQL in the file above).
-2. Redeploy `connect-channel` (→v5, verify_jwt=true) and `process-videos`
-   (→v7, verify_jwt=false) — usual full-file-set deploy via MCP.
-3. Deploy order: migration FIRST, then functions, then the frontend (the
-   ChannelManage save writes the new column and would 400 without it; the
-   old function version just ignores the extra body field, harmless).
-4. Optional backfill once applied: demo teacher → 'Welsh', the Irish channel
-   (`UCuEia7cE8Wm8yMCPMFT5CbA`) → 'Irish'; then Regenerate to see the lift.
+**DEPLOYED 2026-07-16 (Supabase MCP, from Sean's laptop session):**
+- Migration `teacher_target_language` applied — columns verified present on
+  `teachers` (`content_mode` default 'teaching', `target_language` null).
+- `connect-channel` redeployed **v5** (verify_jwt=true).
+- `process-videos` redeployed **v7** (verify_jwt=false).
+- Security advisors re-checked: no new issues (the three standing ones —
+  google_oauth_tokens no-policy [by design], pg_net in public, leaked-password
+  protection — are all pre-existing).
+
+**STILL TO DO for the feature to be live for users:**
+1. **Frontend deploy.** The Connect wizard + ChannelManage card live on branch
+   `claude/project-handover-roadmap-yy8it2`, not `main`. Merge to main and
+   redeploy Vercel to expose the UI. The deployed functions are
+   backward-compatible, so the currently-live (old) frontend keeps working
+   until then — nothing is broken by deploying the backend ahead of the UI.
+2. **Optional backfill** (data, not deploy — left undone deliberately): set
+   existing language channels' `target_language`, e.g. `doctor-cymraeg` and
+   `gales-con-marian` → 'Welsh', `irish-with-mollie-test` → 'Irish',
+   `learn-french-with-alexa` → 'French'; then Regenerate to see the quality
+   lift. Creators can also just do this themselves from the new ChannelManage
+   card once the frontend ships.
 
 ## Future / parked ideas
 

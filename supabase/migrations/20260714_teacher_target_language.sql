@@ -1,5 +1,6 @@
--- NOT YET APPLIED (2026-07-14) — apply via Supabase MCP `apply_migration`
--- (name: teacher_target_language) before deploying the frontend that uses it.
+-- APPLIED 2026-07-16 via Supabase MCP `apply_migration` (name:
+-- teacher_target_language) to project nyekhfvkaujfrfulofmg. Kept here as the
+-- reference copy.
 --
 -- Creator-declared teaching language + content mode (ROADMAP.md Workstream A).
 -- target_language: English name of the language the channel teaches (e.g.
