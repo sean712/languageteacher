@@ -1,8 +1,9 @@
 // connect-channel — onboard a creator by linking a YouTube channel.
 //
 // POST /functions/v1/connect-channel
-// body: { channel: "<id | url | @handle | name>", display_name?: string }
-//   or: { via: 'google', display_name?: string }
+// body: { channel: "<id | url | @handle | name>", display_name?: string,
+//         target_language?: string }
+//   or: { via: 'google', display_name?: string, target_language?: string }
 // → { teacher_slug, channel_title, channel_video_count, queued_now, queue_depth }
 //
 // Two connect paths into the same records:
@@ -97,10 +98,19 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({})) as {
       channel?: string;
       display_name?: string;
+      target_language?: string;
       via?: 'google';
     };
     const viaGoogle = body.via === 'google';
     const channelInput = (body.channel ?? '').trim();
+    // Teaching language, declared in the connect wizard. Stored server-side
+    // (before any video is queued) so the first processing batch already has
+    // it. Empty/absent means "leave whatever is there" — a re-sync without
+    // the field must not clear a previously-set language.
+    const targetLanguage =
+      typeof body.target_language === 'string'
+        ? body.target_language.trim().slice(0, 60)
+        : '';
     if (!viaGoogle && !channelInput) {
       return json({ error: 'Enter a channel ID, URL or @handle.' }, 400);
     }
@@ -176,6 +186,9 @@ Deno.serve(async (req: Request) => {
       if (viaGoogle) {
         patch.oauth_verified_at = new Date().toISOString();
       }
+      if (targetLanguage) {
+        patch.target_language = targetLanguage;
+      }
       if (Object.keys(patch).length) {
         await supabase.from('teachers').update(patch).eq('id', teacher.id);
       }
@@ -193,6 +206,7 @@ Deno.serve(async (req: Request) => {
           avatar_url: resolved.thumbnailUrl || null,
           bio: 'Auto-generated lessons from a linked YouTube channel.',
           oauth_verified_at: viaGoogle ? new Date().toISOString() : null,
+          target_language: targetLanguage || null,
         })
         .select('id,slug,uploads_playlist_id,last_synced_at')
         .single();

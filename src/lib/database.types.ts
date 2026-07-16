@@ -28,6 +28,8 @@ export interface TeacherRow {
   branding: Record<string, unknown>;
   category: string | null;
   target_audience: Record<string, unknown>;
+  target_language: string | null;
+  content_mode: 'teaching' | 'immersion';
   uploads_playlist_id: string | null;
   last_synced_at: string | null;
   created_at: string;

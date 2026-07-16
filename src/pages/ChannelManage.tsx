@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import type { TeacherRow, VideoRow } from '../lib/database.types';
 import CreatorHeader from '../components/CreatorHeader';
+import LanguageInput from '../components/LanguageInput';
 
 type Load = 'loading' | 'ready' | 'not_found';
 type Filter = 'all' | 'published' | 'needs_review' | 'working';
@@ -26,6 +27,8 @@ export default function ChannelManage() {
   const [resyncMsg, setResyncMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [lang, setLang] = useState('');
+  const [langState, setLangState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const refresh = useCallback(async (teacherId: string) => {
     const [{ data: vids }, { count: np }] = await Promise.all([
@@ -62,6 +65,7 @@ export default function ChannelManage() {
         return;
       }
       setTeacher(t as TeacherRow);
+      setLang((t as TeacherRow).target_language ?? '');
       await refresh((t as TeacherRow).id);
       if (!cancelled) setLoad('ready');
     })();
@@ -126,6 +130,24 @@ export default function ChannelManage() {
         : 'Up to date — no new videos.',
     );
     await refresh(teacher.id);
+  };
+
+  // Persist the teaching language (owner update via RLS). The pipeline reads
+  // it at processing time, so it affects new/regenerated lessons only.
+  const saveLanguage = async () => {
+    if (!teacher) return;
+    const value = lang.trim();
+    setLangState('saving');
+    const { error } = await supabase
+      .from('teachers')
+      .update({ target_language: value || null })
+      .eq('id', teacher.id);
+    if (error) {
+      setLangState('error');
+      return;
+    }
+    setTeacher({ ...teacher, target_language: value || null });
+    setLangState('saved');
   };
 
   const removeChannel = async () => {
@@ -264,6 +286,58 @@ export default function ChannelManage() {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Teaching language — pins AI generation to the creator's choice.
+          Shown unless the channel is explicitly a non-language category. */}
+      {(teacher.category === 'language' || !teacher.category) && (
+        <div className="mt-5 rounded-xl border border-paper-300/70 bg-paper-50 p-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium">Teaching language</h2>
+            {!teacher.target_language && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                Not set
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-ink-500 mt-1">
+            The AI builds every lesson in this language. Without it, it has to
+            guess from each video — set it for more reliable lessons.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 mt-2.5">
+            <LanguageInput
+              value={lang}
+              onChange={(v) => {
+                setLang(v);
+                setLangState('idle');
+              }}
+              listId="manage-languages"
+              className="flex-1 rounded-lg border border-paper-300 bg-paper-100/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-ink-400"
+            />
+            <button
+              type="button"
+              onClick={saveLanguage}
+              disabled={
+                langState === 'saving' ||
+                lang.trim() === (teacher.target_language ?? '')
+              }
+              className="px-4 py-2.5 rounded-lg border border-ink-900 text-sm font-medium text-ink-900 hover:bg-ink-900 hover:text-paper-50 transition-colors disabled:opacity-40"
+            >
+              {langState === 'saving' ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {langState === 'saved' && (
+            <p className="text-xs text-emerald-700 mt-2">
+              Saved. New and regenerated lessons will use this — existing
+              lessons keep their content until you hit Regenerate.
+            </p>
+          )}
+          {langState === 'error' && (
+            <p className="text-xs text-red-700 mt-2">
+              Couldn’t save — please try again.
+            </p>
+          )}
         </div>
       )}
 

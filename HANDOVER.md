@@ -443,6 +443,54 @@ Deployed 2026-07-02: `store-google-token` v1 (new), `connect-channel` v4,
 `process-videos` v6, `sync-channel` v3. Migration `google_oauth_tokens`
 applied. Auth gates smoke-tested (anon → 401 on both new paths).
 
+## Target language (Workstream A1, built 2026-07-14 — DEPLOYED 2026-07-16)
+
+Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
+
+- `teachers.target_language` (English name, e.g. 'Welsh') + `content_mode`
+  ('teaching'|'immersion', default 'teaching' — column only, wired in A2).
+  Migration file: `supabase/migrations/20260714_teacher_target_language.sql`.
+- `/connect`: picking the **language** category reveals a required "Which
+  language do you teach?" input (`LanguageInput` — datalist over
+  `src/lib/languages.ts`, free text allowed for low-resource languages).
+  Survives the Google round-trip via the sessionStorage stash; sent in the
+  `connect-channel` body on both paths so it's stored BEFORE videos queue.
+- `connect-channel`: accepts `target_language` (trimmed, ≤60 chars); stamps it
+  on insert and on reconnect-patch. Absent/empty never clears an existing
+  value (so ChannelManage Re-sync can't clobber it).
+- `ChannelManage`: "Teaching language" card (shown when category is language
+  or unset, with a "Not set" nudge badge) — edit + save via owner RLS. Copy
+  tells creators existing lessons need Regenerate to pick it up.
+- Pipeline (`processVideoRow`): reads the teacher's `target_language`; when
+  set it **skips the detectLanguageAndLevel call** (one less OpenAI call per
+  video) and passes `target_language` to `generateActivities`; the stored
+  `videos.language` is pinned to it. Prompt rule 5 becomes authoritative
+  ("never override based on your own detection; too little usable material →
+  low confidence, not a language switch") — this is also the hook A2's
+  immersion mode will extend.
+
+**DEPLOYED 2026-07-16 (Supabase MCP, from Sean's laptop session):**
+- Migration `teacher_target_language` applied — columns verified present on
+  `teachers` (`content_mode` default 'teaching', `target_language` null).
+- `connect-channel` redeployed **v5** (verify_jwt=true).
+- `process-videos` redeployed **v7** (verify_jwt=false).
+- Security advisors re-checked: no new issues (the three standing ones —
+  google_oauth_tokens no-policy [by design], pg_net in public, leaked-password
+  protection — are all pre-existing).
+
+**STILL TO DO for the feature to be live for users:**
+1. **Frontend deploy.** The Connect wizard + ChannelManage card live on branch
+   `claude/project-handover-roadmap-yy8it2`, not `main`. Merge to main and
+   redeploy Vercel to expose the UI. The deployed functions are
+   backward-compatible, so the currently-live (old) frontend keeps working
+   until then — nothing is broken by deploying the backend ahead of the UI.
+2. **Optional backfill** (data, not deploy — left undone deliberately): set
+   existing language channels' `target_language`, e.g. `doctor-cymraeg` and
+   `gales-con-marian` → 'Welsh', `irish-with-mollie-test` → 'Irish',
+   `learn-french-with-alexa` → 'French'; then Regenerate to see the quality
+   lift. Creators can also just do this themselves from the new ChannelManage
+   card once the frontend ships.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation

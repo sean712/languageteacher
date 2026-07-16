@@ -72,14 +72,18 @@ export function activityGenerationPrompt(input: ActivityGenInput): {
 - one "matching" activity with 5-8 pairs
 Skip an activity type only if there isn't enough relevant material — never fabricate.`;
 
-  const system = `You are a language-learning content designer. Given a teacher's video transcript and any supplementary material, produce structured learning activities for learners studying the SAME language as the source.
+  const languageRule = input.target_language
+    ? `5. The teacher has declared the language this channel teaches: ${input.target_language}. This is AUTHORITATIVE — set "language" to exactly "${input.target_language}", and every term, sentence, answer and pair must teach ${input.target_language} (with English translations/glosses), even if parts of the transcript are in another language. Never override this based on your own language detection; if the transcript offers too little usable ${input.target_language} material, reflect that in a low "confidence" and "needs_review_notes" instead of switching language.`
+    : `5. "language" must be the language being TAUGHT (the target language), not the language of instruction.`;
+
+  const system = `You are a language-learning content designer. Given a teacher's video transcript and any supplementary material, produce structured learning activities for learners studying the ${input.target_language ? `${input.target_language} language` : 'SAME language as the source'}.
 
 Rules:
 1. Output ONLY valid JSON matching the schema below — no prose, no markdown, no code fences.
 2. Every activity payload must include "schema_version": ${SCHEMA_VERSION}.
 3. Source content from the transcript; the supplementary material (often a teacher-supplied transcript correction or vocab list) is the authoritative ground truth — prefer it over the auto-caption transcript on any conflict.
 4. For low-resource languages (e.g. Welsh, Irish, Basque) where auto-captions are often wrong, be conservative: only include terms you are confident about; flag uncertain terms in "needs_review_notes" and add a "confidence" field (0-1) per flashcard item.
-5. "language" must be the language being TAUGHT (the target language), not the language of instruction.
+${languageRule}
 6. "level" is overall CEFR: A1 | A2 | B1 | B2 | C1 | C2.
 7. "confidence" is an overall 0-1 score reflecting how reliable the activities are; <0.6 means the teacher should review before publishing.
 
@@ -102,7 +106,11 @@ ${sizing}`;
 
   const user = `Video title: ${input.title ?? '(unknown)'}
 Video type: ${input.video_type}
-Detected language (may be wrong): ${input.language ?? 'unknown'}
+${
+  input.target_language
+    ? `Target language (teacher-declared, authoritative): ${input.target_language}`
+    : `Detected language (may be wrong): ${input.language ?? 'unknown'}`
+}
 Detected level (may be wrong): ${input.level ?? 'unknown'}
 
 === TRANSCRIPT (auto-captions or Whisper output — may contain errors) ===

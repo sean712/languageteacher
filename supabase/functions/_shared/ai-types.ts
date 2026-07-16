@@ -13,6 +13,10 @@ export interface ActivityGenInput {
   supplementary_text?: string;
   language?: string;
   level?: string;
+  // Teacher-declared language the channel teaches (teachers.target_language).
+  // Authoritative: when set, the pipeline skips detection and generation must
+  // produce activities in this language regardless of transcript noise.
+  target_language?: string;
   video_type: 'short' | 'long';
   title?: string;
 }
