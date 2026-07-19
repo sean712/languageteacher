@@ -507,14 +507,20 @@ Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
 Clickable pronunciation for taught words/phrases, ported from Sean's
 `lexical2.0` repo (see ROADMAP Workstream G for the full spec):
 
-- **Edge Function `tts` v1** (deployed, verify_jwt=true — the anon key passes
+- **Edge Function `tts` v2** (deployed, verify_jwt=true — the anon key passes
   it BY DESIGN: flashcards are the free tier and TTS is their core value;
   300-char cap is the only guard). POST `{ text, language }` → base64 mp3.
-  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice);
-  everything else → Polly (Welsh = `Gwyneth`). The language normaliser
-  accepts everything found in prod `videos.language`: English names, ISO
-  codes, and native names (`Cymraeg`→cy, `français`→fr…). Unknown language
-  (e.g. Cornish) → 400, and the UI simply shows no speaker button.
+  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice —
+  **confirmed working by Sean 2026-07-19**); everything else → Polly
+  (Welsh = `Gwyneth`). The language normaliser accepts English names, ISO
+  codes, and native names (`Cymraeg`→cy, `français`→fr…).
+  **POLICY (Sean):** creators can teach ANY language — if Polly has a voice
+  we offer TTS, if not we just don't (unknown language → 400, UI hides the
+  speaker button; e.g. Cornish/Basque/Scottish Gaelic get none). v2 covers
+  Polly's full catalogue incl. Japanese/Korean/Hindi/Russian/Romanian/
+  Czech/Catalan/Cantonese. Adding a future Polly language = one line each in
+  NAME_TO_CODE + VOICE_MAP + POLLY_LANG (function) and SPEAKABLE (client
+  mirror in audio-player.ts) — keep the two files in sync.
 - **Client**: `src/lib/audio-player.ts` (Lexical port minus its auto-play
   queue, plus an in-session clip cache + `hasVoice()`), and
   `src/components/SpeakButton.tsx` (self-hiding, stopPropagation, never
@@ -536,6 +542,39 @@ no key). No redeploy needed after setting secrets.
 direct calls to the functions endpoint). Verify with:
 `curl -X POST https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/tts -H "Authorization: Bearer <anon key>" -H "Content-Type: application/json" -d '{"text":"Bore da","language":"Welsh"}'`
 — expect `{"audioData":"...","success":true}`. Frontend ships via PR #2.
+
+## Design system — premium pass (2026-07-19)
+
+Sean's brief: the site looked "cheap and dull"; wanted premium + innovative
+but classy — "no shiny buttons and animations". The move was contrast +
+craft, not effects:
+
+- **Tokens (index.css)**: emerald re-saturated (#16805c/#0e6a4b/#0a5138),
+  paper cleaned up, and two NEW families — `pine-800/900/950` (deep
+  green-black for dark sections; never use flat ink-900 panels again) and
+  `gold-400/500/600` (restrained brass, ONLY for hairlines, numerals and
+  eyebrow labels — never buttons or large fills; that's the classy line).
+  `brand-*` aliases updated to match. Utilities: `.eyebrow` (small-caps label
+  with leading rule), `.bg-dotgrid` (faded hero texture), `.bg-pine-lines`
+  (very faint ledger rules on pine — keep opacity ≤0.02, at 0.045 it fought
+  real dividers).
+- **Fonts (index.html)**: Fraunces now loads REAL italics + 700 (the old URL
+  had no italic axis, so `italic` rendered faux). Inter unchanged.
+- **Landing page (Home.tsx)** fully rebuilt, single `max-w-6xl` grid so
+  edges align page-long: hero (bigger serif headline, fact row with hairline
+  dividers) → ribbon strip → How-it-works (asymmetric two-column, oversized
+  brass numerals) → **Showcase** (three faithful product mock-cards:
+  flashcard+speaker, quiz, AI tutor chat — decorative, aria-hidden) →
+  value props 2×2 → **RevShare** (pine-950 close: "Your teaching should
+  earn.", 3-step numbered list, honest "Payouts launching soon" tag, CTAs
+  inside it) → pine footer. Old ShowcaseCTA/LogoStrip removed.
+- Rev-share copy deliberately gives NO percentage (the 70/30 split is still
+  a pending decision — ROADMAP C) and carries the "launching soon" tag; keep
+  both until Stripe ships.
+- Verified via Playwright screenshots desktop+mobile (sandbox blocks Google
+  Fonts so screenshots show fallback serif; prod loads Fraunces). Inner app
+  pages inherit the richer tokens automatically; a matching polish pass on
+  Login/TeacherPage/dashboard is worthwhile follow-up, same rules.
 
 ## Future / parked ideas
 

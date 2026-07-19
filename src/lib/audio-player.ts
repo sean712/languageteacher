@@ -99,7 +99,8 @@ export const audioPlayer = new AudioPlayer();
 
 // Client-side mirror of the tts function's language normaliser — used to
 // decide whether to render a speaker button at all. Keep in sync with
-// supabase/functions/tts/index.ts.
+// supabase/functions/tts/index.ts. Policy: any language with a Polly (or
+// Abair) voice gets TTS; anything else just doesn't get a speaker button.
 const SPEAKABLE: Record<string, true> = {
   welsh: true, cymraeg: true, cy: true,
   irish: true, gaeilge: true, ga: true,
@@ -107,18 +108,26 @@ const SPEAKABLE: Record<string, true> = {
   german: true, deutsch: true, de: true,
   spanish: true, 'español': true, espanol: true, es: true,
   italian: true, italiano: true, it: true,
-  portuguese: true, pt: true,
+  portuguese: true, 'português': true, pt: true,
   'brazilian portuguese': true, 'portuguese (brazilian)': true, 'pt-br': true,
-  dutch: true, nl: true,
-  danish: true, da: true,
-  finnish: true, fi: true,
-  icelandic: true, is: true,
-  norwegian: true, no: true, nb: true,
-  polish: true, pl: true,
-  swedish: true, sv: true,
-  turkish: true, tr: true,
+  dutch: true, nederlands: true, nl: true,
+  danish: true, dansk: true, da: true,
+  finnish: true, suomi: true, fi: true,
+  icelandic: true, 'íslenska': true, is: true,
+  norwegian: true, norsk: true, no: true, nb: true,
+  polish: true, polski: true, pl: true,
+  swedish: true, svenska: true, sv: true,
+  turkish: true, 'türkçe': true, tr: true,
   arabic: true, ar: true, arb: true,
   'mandarin chinese': true, mandarin: true, chinese: true, 'cmn-cn': true, zh: true,
+  cantonese: true, yue: true,
+  japanese: true, '日本語': true, ja: true,
+  korean: true, '한국어': true, ko: true,
+  hindi: true, hi: true,
+  russian: true, ru: true,
+  romanian: true, ro: true,
+  czech: true, cs: true,
+  catalan: true, 'català': true, ca: true,
   english: true, 'en-gb': true, 'en-us': true, en: true,
 };
 
