@@ -25,6 +25,7 @@ const MAX_SENTENCE = 600;
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // Free-write AI feedback is premium (makes an AI call) → account-gated.
 // verify_jwt accepts the anon key, so resolve the real user here.
@@ -66,6 +67,7 @@ Deno.serve(async (req: Request) => {
       language?: string;
       level?: string;
       sentence?: string;
+      video_id?: string;
     };
 
     const word = (body.word ?? '').trim();
@@ -90,6 +92,34 @@ Deno.serve(async (req: Request) => {
       level: body.level?.trim() || undefined,
       sentence,
     });
+
+    // Server-side ai_feedback event (Workstream F1) — the authoritative
+    // rev-share signal, so it's logged here where it can't be spoofed.
+    // Best-effort: an analytics failure must never fail the feedback.
+    const videoId = (body.video_id ?? '').trim();
+    if (videoId) {
+      try {
+        const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+          auth: { persistSession: false },
+        });
+        const { data: v } = await admin
+          .from('videos')
+          .select('teacher_id')
+          .eq('id', videoId)
+          .maybeSingle();
+        const teacherId = (v as { teacher_id: string } | null)?.teacher_id;
+        if (teacherId) {
+          await admin.from('lesson_events').insert({
+            teacher_id: teacherId,
+            video_id: videoId,
+            user_id: userId,
+            event: 'ai_feedback',
+          });
+        }
+      } catch (e) {
+        console.warn('ai_feedback event insert failed', e);
+      }
+    }
 
     return json(feedback);
   } catch (err) {

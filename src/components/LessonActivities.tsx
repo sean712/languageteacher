@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { ActivityRow, VideoRow } from '../lib/database.types';
 import { useCompleted } from '../lib/learner';
 import { useAuth } from '../lib/auth';
+import { canUse, type Feature } from '../lib/access';
+import { track } from '../lib/track';
 import FlashcardDeck from './FlashcardDeck';
 import Quiz from './Quiz';
 import GapFill from './GapFill';
@@ -24,9 +26,6 @@ import {
 // Menu types include 'free_write', a frontend-only activity synthesized from
 // a lesson's flashcard terms (not a stored activity row).
 export type MenuType = ActivityType | 'free_write';
-
-// Premium = makes AI/API calls → account-gated. Static activities are free.
-const PREMIUM_ACTIVITIES = new Set<MenuType>(['free_write']);
 
 const FREE_WRITE_MAX_WORDS = 6;
 
@@ -139,22 +138,43 @@ export default function LessonActivities({
   const requireSignIn = () =>
     navigate('/login', { state: { from: location.pathname + location.search } });
 
-  // Premium activities (AI feedback) are account-gated; static ones are free.
+  // The boundary lives in lib/access.ts: flashcards are free for everyone;
+  // everything else is account-gated (subscription-gated once Stripe lands).
   const onPick = (t: MenuType) => {
-    if (PREMIUM_ACTIVITIES.has(t) && !user) {
+    if (!canUse(t as Feature, user)) {
       requireSignIn();
       return;
     }
+    track('activity_start', {
+      teacherId: video.teacher_id,
+      videoId: video.id,
+      activityType: t,
+    });
     setSelected(t);
   };
 
-  // AI chat is account-gated (premium). Anonymous → sign in.
   const onChat = () => {
-    if (!user) {
+    if (!canUse('ai_chat', user)) {
       requireSignIn();
       return;
     }
     setChatting(true);
+  };
+
+  // Completion events: once per activity per device (mirrors useCompleted),
+  // plus a lesson_complete when the last activity ticks over.
+  const onActivityComplete = (t: MenuType) => {
+    if (!completed.has(t)) {
+      track('activity_complete', {
+        teacherId: video.teacher_id,
+        videoId: video.id,
+        activityType: t,
+      });
+      if (doneCount + 1 === parsed.length) {
+        track('lesson_complete', { teacherId: video.teacher_id, videoId: video.id });
+      }
+    }
+    markComplete(t);
   };
 
   if (parsed.length === 0) {
@@ -186,7 +206,7 @@ export default function LessonActivities({
       parsed={current}
       completed={completed.has(current.type)}
       nextLabel={nextUp ? META[nextUp.type].label : null}
-      onComplete={() => markComplete(current.type)}
+      onComplete={() => onActivityComplete(current.type)}
       onBack={() => setSelected(null)}
       onNext={nextUp ? () => setSelected(nextUp.type) : undefined}
     />
@@ -252,7 +272,7 @@ function ActivityMenu({
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 font-medium leading-tight">
                   {META[p.type].label}
-                  {PREMIUM_ACTIVITIES.has(p.type) && !signedIn && <PremiumTag />}
+                  {p.type !== 'flashcards' && !signedIn && <PremiumTag />}
                 </span>
                 <span className="block text-xs text-ink-400 mt-0.5">
                   {META[p.type].blurb} · {countLabel(p.type, p.count)}

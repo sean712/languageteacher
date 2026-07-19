@@ -58,7 +58,7 @@ export default function LessonView({
             {showSave && (
               <div className="flex-shrink-0 flex items-center gap-2">
                 <NotesButton active={notesOpen} onClick={onNotes} />
-                <SaveButton videoId={video.id} />
+                <SaveButton videoId={video.id} teacherId={video.teacher_id} />
               </div>
             )}
           </div>
@@ -109,8 +109,8 @@ function NotesButton({ active, onClick }: { active: boolean; onClick: () => void
   );
 }
 
-function SaveButton({ videoId }: { videoId: string }) {
-  const { saved, toggle, signedIn } = useSavedLesson(videoId);
+function SaveButton({ videoId, teacherId }: { videoId: string; teacherId?: string }) {
+  const { saved, toggle, signedIn } = useSavedLesson(videoId, teacherId);
   const navigate = useNavigate();
   const location = useLocation();
 

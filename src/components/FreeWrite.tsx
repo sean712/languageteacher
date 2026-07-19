@@ -101,6 +101,8 @@ export default function FreeWrite({
           language: language ?? 'the target language',
           level,
           sentence: text.trim(),
+          // For server-side ai_feedback event logging (rev-share signal).
+          video_id: videoId,
         },
       },
     );
