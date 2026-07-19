@@ -7,12 +7,17 @@ he writes detailed briefs and prefers execution over re-litigation.
 The fundamental product brief is in README.md and in memory
 (`project_overview.md`). What follows is current state, not goals.
 
-**What's next lives in `ROADMAP.md`** (drafted 2026-07-12 from Sean's Phase 3
-brief): Stripe subscriptions + creator revenue sharing, agentic quality
-checking + error flagging, creator-specified target language + travel/immersion
-content support, account/subscription management (Stripe-hosted pages), Resend
-email, and a creator stats dashboard. Read this file for where we are, then
-ROADMAP.md for what to build and in what order.
+**What's next lives in `ROADMAP.md`** (Phase 3 drafted 2026-07-12; Phase 3b
+added 2026-07-19 from Sean's follow-up brief): Stripe subscriptions + creator
+revenue sharing, agentic quality checking + error flagging, travel/immersion
+content, account management, Resend email, creator stats dashboard, **TTS
+pronunciation (Polly + Abair — working code copied inline from Sean's
+`sean712/lexical2.0` repo)**, an **admin dashboard** for Sean, and a **new
+free/premium boundary (flashcards free, everything else subscribed)**. Read
+this file for where we are, then ROADMAP.md for what to build and in what
+order. NOTE: Sean will soon lose access to the strongest models — the Phase
+3b specs are written to be followed literally by smaller models; don't
+redesign them.
 
 ## What's live
 
@@ -371,7 +376,13 @@ Login copy generalised for both audiences. Hooks in `src/lib/learner.ts`.
    Resend, creator stats). Supersedes the old "non-language categories,
    Stripe" placeholder.
 
-**Free vs premium boundary (updated 2026-06-12):** the rule is **anything that
+**Free vs premium boundary — SUPERSEDED 2026-07-19:** Sean's new rule is
+**flashcards free (anonymous, incl. TTS); everything else needs
+sign-up/subscription** — see ROADMAP.md Workstream I for the implementation
+spec. The paragraph below describes the boundary as currently DEPLOYED
+(still true in prod until Workstream I ships):
+
+The old rule was **anything that
 makes an AI/API call is account-gated; static content is free.**
 - Anonymous (free): all the static activities (flashcards, quiz, gap-fill,
   matching, quick-practice). No account, no API calls.
@@ -490,6 +501,41 @@ Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
    `learn-french-with-alexa` → 'French'; then Regenerate to see the quality
    lift. Creators can also just do this themselves from the new ChannelManage
    card once the frontend ships.
+
+## TTS pronunciation (Workstream G, built + deployed 2026-07-19)
+
+Clickable pronunciation for taught words/phrases, ported from Sean's
+`lexical2.0` repo (see ROADMAP Workstream G for the full spec):
+
+- **Edge Function `tts` v1** (deployed, verify_jwt=true — the anon key passes
+  it BY DESIGN: flashcards are the free tier and TTS is their core value;
+  300-char cap is the only guard). POST `{ text, language }` → base64 mp3.
+  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice);
+  everything else → Polly (Welsh = `Gwyneth`). The language normaliser
+  accepts everything found in prod `videos.language`: English names, ISO
+  codes, and native names (`Cymraeg`→cy, `français`→fr…). Unknown language
+  (e.g. Cornish) → 400, and the UI simply shows no speaker button.
+- **Client**: `src/lib/audio-player.ts` (Lexical port minus its auto-play
+  queue, plus an in-session clip cache + `hasVoice()`), and
+  `src/components/SpeakButton.tsx` (self-hiding, stopPropagation, never
+  nested inside another button — flashcard/matching tiles are buttons, so
+  the speaker sits as a SIBLING).
+- **Wired into all five activities**: flashcard card (bottom-right, always
+  plays the term), matching left column, gap-fill solved sentences, quiz
+  "Hear it" row after answering, quick-practice revealed answer.
+  `LessonActivities` passes `video.language` down.
+
+**Sean must do (the one blocker):** copy `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_REGION` from the Lexical 2.0 Supabase project
+into languageteacher's Edge Function secrets (Dashboard → Edge Functions →
+Secrets). Until then Polly languages (Welsh/French/…) return 500
+"AWS credentials not configured" — **Irish works immediately** (Abair needs
+no key). No redeploy needed after setting secrets.
+
+**Not smoke-tested from the build session** (its network policy blocks
+direct calls to the functions endpoint). Verify with:
+`curl -X POST https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/tts -H "Authorization: Bearer <anon key>" -H "Content-Type: application/json" -d '{"text":"Bore da","language":"Welsh"}'`
+— expect `{"audioData":"...","success":true}`. Frontend ships via PR #2.
 
 ## Future / parked ideas
 

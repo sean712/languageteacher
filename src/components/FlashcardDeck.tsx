@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FlashcardsPayload } from '../lib/activity-schemas';
+import SpeakButton from './SpeakButton';
 
-type Props = { payload: FlashcardsPayload; onComplete?: () => void };
+type Props = {
+  payload: FlashcardsPayload;
+  language?: string | null;
+  onComplete?: () => void;
+};
 
 const SWIPE_THRESHOLD = 60;
 
-export default function FlashcardDeck({ payload, onComplete }: Props) {
+export default function FlashcardDeck({ payload, language, onComplete }: Props) {
   const cards = payload.items;
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -103,6 +108,12 @@ export default function FlashcardDeck({ payload, onComplete }: Props) {
             </CardFace>
           </div>
         </button>
+        {/* Sibling of the flip button (never nest a button in a button) —
+            always plays the term: that's the pronunciation being learned,
+            whichever side is showing. */}
+        <div className="absolute bottom-2 right-2 z-10">
+          <SpeakButton text={card.term} language={language} />
+        </div>
       </div>
 
       <div className="flex items-center justify-between mt-4 gap-3">

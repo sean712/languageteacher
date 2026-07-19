@@ -378,17 +378,23 @@ function ActivityBody({
       return (
         <FlashcardDeck
           payload={parsed.payload as FlashcardsPayload}
+          language={video.language}
           onComplete={onComplete}
         />
       );
     case 'quiz':
       return (
-        <Quiz payload={parsed.payload as QuizPayload} onComplete={onComplete} />
+        <Quiz
+          payload={parsed.payload as QuizPayload}
+          language={video.language}
+          onComplete={onComplete}
+        />
       );
     case 'gap_fill':
       return (
         <GapFill
           payload={parsed.payload as GapFillPayload}
+          language={video.language}
           onComplete={onComplete}
         />
       );
@@ -396,6 +402,7 @@ function ActivityBody({
       return (
         <Matching
           payload={parsed.payload as MatchingPayload}
+          language={video.language}
           onComplete={onComplete}
         />
       );
@@ -403,6 +410,7 @@ function ActivityBody({
       return (
         <QuickPractice
           payload={parsed.payload as QuickPracticePayload}
+          language={video.language}
           onComplete={onComplete}
         />
       );

@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import type { QuickPracticePayload } from '../lib/activity-schemas';
+import SpeakButton from './SpeakButton';
 
-type Props = { payload: QuickPracticePayload; onComplete?: () => void };
+type Props = {
+  payload: QuickPracticePayload;
+  language?: string | null;
+  onComplete?: () => void;
+};
 
-export default function QuickPractice({ payload, onComplete }: Props) {
+export default function QuickPractice({ payload, language, onComplete }: Props) {
   const [revealed, setRevealed] = useState(false);
 
   const reveal = () => {
@@ -31,8 +36,9 @@ export default function QuickPractice({ payload, onComplete }: Props) {
       )}
 
       {revealed ? (
-        <p className="text-center text-lg text-emerald-700 font-medium mt-5">
+        <p className="flex items-center justify-center gap-1.5 text-center text-lg text-emerald-700 font-medium mt-5">
           {payload.answer}
+          <SpeakButton text={payload.answer} language={language} size="sm" />
         </p>
       ) : (
         <button
