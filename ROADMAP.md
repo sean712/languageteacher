@@ -453,11 +453,300 @@ rev-share job uses are visible to the creator (no black-box payouts).
 
 ---
 
+---
+
+# Phase 3b additions (Sean's brief, 2026-07-19)
+
+Four more workstreams. IMPORTANT for whoever picks these up: Sean will soon
+lose access to the strongest models, so these specs are deliberately
+self-contained and step-by-step — exact files, copied working code, explicit
+checklists. Follow them literally; don't redesign. If something is genuinely
+impossible as written, say so and stop rather than improvising a different
+architecture.
+
+Summary of the brief:
+1. **TTS pronunciation** — every taught word/phrase clickable → hear it.
+   Amazon Polly (great for Welsh), Abair for Irish. Working implementation
+   exists in Sean's `sean712/lexical2.0` repo — it is COPIED INLINE below, so
+   you don't need that repo (re-add via `add_repo` only if something is
+   unclear).
+2. **Creator dashboard** (usage stats, revenue payouts) — this is existing
+   Workstream F + C2. No change to those specs; build them as written.
+3. **Boundary change: flashcards are free; everything else needs
+   sign-up/subscription.** Supersedes the old "all static activities free"
+   rule. Details in Workstream I below (and adjusts C1 enforcement).
+4. **Admin dashboard** for Sean (platform owner): platform stats, top
+   channels, revenue. Workstream H below.
+
+## Workstream G — TTS pronunciation (Polly + Abair)
+
+**Goal:** in every activity, tapping a target-language word or phrase (or a
+small speaker icon next to it) plays its pronunciation. Amazon Polly for most
+languages (Welsh = `Gwyneth`), Abair (free, no key) for Irish.
+
+### G1. Edge Function `tts` (new)
+
+Create `supabase/functions/tts/index.ts`. This is a port of Lexical 2.0's
+`tts-polly` function, which is proven in production — copy this structure
+exactly, with these adaptations for this codebase: (a) use the standard CORS
+block and `json()` helper pattern from `evaluate-sentence/index.ts`; (b) the
+request takes a **language NAME** (what `teachers.target_language` stores,
+e.g. `'Welsh'`) and maps it to a code internally.
+
+Request: `POST { text: string, language: string }` (language = English name).
+Response: `{ audioData: <base64 mp3>, contentType: 'audio/mpeg', success: true }`
+or `{ error, success: false }`.
+
+Core logic (from Lexical 2.0, working):
+
+```ts
+// Map our stored language names -> TTS language codes.
+const NAME_TO_CODE: Record<string, string> = {
+  Welsh: 'cy', Irish: 'ga', French: 'fr', German: 'de', Spanish: 'es',
+  Italian: 'it', Portuguese: 'pt', Dutch: 'nl', Danish: 'da', Finnish: 'fi',
+  Icelandic: 'is', Norwegian: 'no', Polish: 'pl', Swedish: 'sv',
+  Turkish: 'tr', Arabic: 'arb', 'Mandarin Chinese': 'cmn-CN',
+  English: 'en-GB',
+};
+
+// Polly voice per code (Lexical's proven map — Welsh is Gwyneth).
+const VOICE_MAP: Record<string, string> = {
+  'cmn-CN': 'Zhiyu', arb: 'Zeina', cy: 'Gwyneth', da: 'Naja', nl: 'Lotte',
+  fi: 'Suvi', fr: 'Celine', de: 'Marlene', is: 'Dora', it: 'Carla',
+  no: 'Liv', pl: 'Ewa', 'pt-br': 'Camila', pt: 'Ines', es: 'Penelope',
+  sv: 'Astrid', tr: 'Filiz', 'en-US': 'Matthew', 'en-GB': 'Amy',
+};
+
+// Polly LanguageCode parameter needs region-qualified codes.
+const POLLY_LANG: Record<string, string> = {
+  cy: 'cy-GB', da: 'da-DK', nl: 'nl-NL', fi: 'fi-FI', fr: 'fr-FR',
+  de: 'de-DE', is: 'is-IS', it: 'it-IT', no: 'nb-NO', pl: 'pl-PL',
+  'pt-br': 'pt-BR', pt: 'pt-PT', es: 'es-ES', sv: 'sv-SE', tr: 'tr-TR',
+};
+```
+
+**Irish branch** (code === 'ga'): POST to `https://api.abair.ie/v3/synthesis`
+— no API key needed:
+
+```ts
+const abairResponse = await fetch('https://api.abair.ie/v3/synthesis', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  body: JSON.stringify({
+    synthinput: { text },
+    voiceparams: {
+      name: 'ga_CO_snc_piper',   // Connemara voice — Sean's choice, keep it
+      languageCode: 'ga-IE',
+      gender: 'UNSPECIFIED',
+    },
+    audioconfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 1.0 },
+  }),
+});
+const abairData = await abairResponse.json();
+// abairData.audioContent is the base64 mp3 — return it as audioData.
+```
+
+**Everything else** → Polly via the AWS SDK (works on Deno Edge):
+
+```ts
+const { PollyClient, SynthesizeSpeechCommand } =
+  await import('npm:@aws-sdk/client-polly@3.425.0');
+const pollyClient = new PollyClient({
+  region: Deno.env.get('AWS_REGION') ?? 'eu-west-2',
+  credentials: {
+    accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
+    secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
+  },
+});
+const voiceId = VOICE_MAP[code] ?? 'Amy';
+const neural = ['Matthew','Joanna','Amy','Emma','Brian','Ivy','Kevin',
+  'Kimberly','Salli','Joey','Justin','Kendra','Ruth','Stephen','Aria',
+  'Ayanda','Gabrielle','Liam'].includes(voiceId);
+const resp = await pollyClient.send(new SynthesizeSpeechCommand({
+  Text: text, VoiceId: voiceId, OutputFormat: 'mp3', TextType: 'text',
+  Engine: neural ? 'neural' : 'standard',
+  LanguageCode: POLLY_LANG[code] ?? code,
+}));
+const audioBytes = await resp.AudioStream!.transformToByteArray();
+// base64-encode audioBytes (loop + btoa, as in Lexical) and return.
+```
+
+Guards: cap `text` at 300 chars (400 on violation); unknown language name →
+`{ error: 'No voice available for <language>', success: false }` with 400 so
+the UI can hide the speaker button gracefully next time.
+
+Deploy with `verify_jwt=true` — the anon key passes that gate, which is what
+we want: **anonymous users CAN use TTS** (flashcards are the free tier and
+pronunciation is their core value; Abair is free and Polly is ~$4/1M chars).
+Keep the 300-char cap as the only guard for now; add per-IP rate limiting
+before heavy scale.
+
+**Secrets Sean must set** (Supabase → Edge Functions → Secrets — tell him,
+don't ask for values in chat): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_REGION` (he already has these working in the Lexical 2.0 Supabase
+project — same values work here; the IAM user needs only `polly:SynthesizeSpeech`).
+
+### G2. Client audio player
+
+Create `src/lib/audio-player.ts` — port Lexical 2.0's `src/lib/audioPlayer.ts`
+**minus the auto-play queue** (that's a Lexical conversation feature we don't
+need; deleting it removes ~half the file). Keep:
+
+- The singleton `AudioPlayer` class: base64 → `Blob` → object URL →
+  `HTMLAudioElement`, with `isPlaying`/`isLoading`/`error` state, a
+  `subscribe(cb)` method, `stop()`, and object-URL cleanup on `ended`/`error`
+  (`URL.revokeObjectURL` — keep this, it prevents memory leaks).
+- `playTextToSpeech(text, language)`: call the `tts` function via
+  `supabase.functions.invoke('tts', { body: { text, language } })` (use the
+  existing client from `src/lib/supabase.ts` rather than raw fetch), then
+  `audioPlayer.playFromBase64(data.audioData, data.contentType)`.
+- In-memory cache: `Map<string, {audioData, contentType}>` keyed by
+  `` `${language}:${text}` `` so repeat taps in a session don't re-hit Polly.
+  (Lexical doesn't cache; add this — it's a few lines and halves cost.)
+
+### G3. Speaker affordance in activities
+
+New tiny component `src/components/SpeakButton.tsx`: a small speaker icon
+button (🔊 or an inline SVG matching the paper/ink style), props
+`{ text: string; language: string | null }`. Renders nothing when `language`
+is null/unmappable. On click: `playTextToSpeech(text, language)`; show a
+subtle spinner while loading (subscribe to the player state); `stopPropagation`
+so it never triggers the parent card's tap/flip.
+
+Wire it into every place a target-language string is shown. The lesson's
+language comes from `videos.language` (already selected on the public page)
+— pass it down through `LessonActivities` to each activity component:
+
+- `FlashcardDeck` — on the term side of the card (the big win; do this first).
+- `Matching` — on target-language tiles (the `left` side; skip English side).
+- `GapFill` — on the completed sentence after a correct answer, and on the
+  answer reveal.
+- `Quiz` — next to the question when the question is in the target language;
+  next to the correct option on the answer reveal.
+- `QuickPractice` — next to the prompt/answer as appropriate.
+- `LessonNotes`/`Notebook` and `FreeWrite` saved sentences — optional, later.
+
+Mobile note (non-negotiable per Sean): tap targets ≥ 40px, and audio must be
+triggered directly from the click handler (iOS Safari blocks `audio.play()`
+outside a user gesture — the Lexical player already complies; don't move the
+play call into an async callback detached from the gesture).
+
+**Acceptance (G):** on a Welsh lesson, tapping the speaker on a flashcard term
+plays Gwyneth saying it (first tap ≤ ~2s, repeat taps instant from cache); an
+Irish lesson plays the Abair Connemara voice; an unmappable language shows no
+speaker buttons; quiz/matching/gap-fill all have working speakers; nothing
+breaks anonymously.
+
+## Workstream H — Admin dashboard (platform owner)
+
+**Goal:** Sean (only) sees platform-wide stats: totals, top channels, revenue.
+
+### H1. Admin gate
+
+Simplest safe pattern — do NOT invent RLS admin policies:
+
+- New Edge Function `admin-stats`, `verify_jwt=true`, plus in-function check:
+  resolve `callerUserId` (copy the helper from `connect-channel/index.ts`),
+  then compare the caller's user id against the `ADMIN_USER_IDS` secret
+  (comma-separated auth user ids). Not in the list → 403. Sean sets the
+  secret with his own auth user id (he can read it from Supabase Dashboard →
+  Authentication → Users).
+- All queries inside run with the service-role client (cross-tenant reads
+  never touch RLS).
+
+### H2. What it returns (one POST, one JSON payload)
+
+- **Totals:** teachers, published lessons, learners (auth users), active
+  subscriptions + MRR (from `subscriptions`, once Workstream C lands — return
+  zeros gracefully before that), lessons published in the last 30 days.
+- **Top channels:** top 10 by engagement points from `lesson_events`
+  (30-day window) with published-lesson counts and follower counts.
+- **Revenue:** current-month pool estimate, last `revenue_shares` run
+  (per-creator splits + status), total paid out to date. Zeros before C2.
+- **Trend:** last 30 days of daily events from `channel_stats_daily`
+  (Workstream F1); or computed directly from `lesson_events` if F1's rollup
+  isn't built yet.
+- **Pipeline health:** counts of videos by status across all teachers, plus
+  count of `failed` in the last 7 days — Sean's early-warning signal.
+
+### H3. `/admin` page
+
+`src/pages/Admin.tsx`, route `/admin` behind `RequireAuth`. On load call
+`admin-stats`; on 403 render the same "not found" treatment ChannelManage
+uses (don't advertise the route exists). UI: stat tiles (reuse the `Tile`
+pattern from `ChannelManage.tsx`), a top-channels table, a revenue card, and
+an inline-SVG 30-day sparkline (same no-chart-library rule as Workstream F).
+No link to `/admin` from anywhere public — Sean just knows the URL.
+
+**Acceptance (H):** Sean's account sees numbers that match reality; any other
+account (and anonymous) gets a 403/not-found; page renders sanely with
+Stripe not yet built (zeros, not crashes).
+
+## Workstream I — New free/premium boundary (flashcards free)
+
+**Sean's rule (2026-07-19), supersedes the old "static = free" boundary:**
+
+- **Anonymous / free:** browse channel pages, watch videos, do **flashcards**
+  (with TTS), see the other activity tiles (locked).
+- **Everything else** — quiz, gap-fill, matching, quick-practice, free-write,
+  AI chat, save/follow/progress/notes — **requires sign-up + subscription**
+  (Workstream C's "Lingua Premium"). Until Stripe ships, gate on
+  "signed in" as the interim wall, then tighten to "subscribed" when C1's
+  `is_premium` lands — build the check as one function so the tightening is
+  a one-line change.
+
+### Implementation
+
+- `src/lib/access.ts` — single source of truth:
+  ```ts
+  export type Feature = 'flashcards' | 'quiz' | 'gap_fill' | 'matching'
+    | 'quick_practice' | 'free_write' | 'ai_chat' | 'save' | 'follow'
+    | 'notes' | 'progress';
+  // Interim: signed-in unlocks everything; flashcards always free.
+  // After C1: replace `!!user` with the subscription check.
+  export function canUse(feature: Feature, user: User | null): boolean {
+    if (feature === 'flashcards') return true;
+    return !!user;
+  }
+  ```
+  EVERY gate in the UI calls `canUse` — no scattered `if (user)` checks.
+- `LessonActivities` picker: locked tiles render with a small lock badge and
+  a one-line upsell ("Free with an account" → later "Premium"); tapping goes
+  to `/login` (later `/upgrade`) and returns to the lesson after auth (reuse
+  the existing redirect-back pattern from Save/Follow).
+- Shorts: `quick_practice` is the only activity on a Short and it's now
+  gated — acceptable (flashcard-less Shorts become teaser content; the
+  synthesized "Make it personal" is already account-gated).
+- Server side: AI functions are already account-gated in-function; when C1
+  lands they check `is_premium` too (spec'd in C1). The static activities'
+  data is public (`activities` rows are readable) — the gate is UX-level for
+  now; move quiz/gap-fill/matching payloads behind an authenticated endpoint
+  only if freeloading via devtools actually becomes a problem (don't build
+  that pre-launch).
+- Update HANDOVER's "Free vs premium boundary" section to point here when
+  this ships.
+
+**Acceptance (I):** anonymous user can complete flashcards with TTS but sees
+locks on all other tiles; tapping a locked tile round-trips through login and
+lands back in the lesson with the tile unlocked; signed-in (interim) users can
+do everything; nothing regresses for creators.
+
+## Updated build order (Phase 3b)
+
+TTS is Sean's most concrete immediate want and is independent of everything
+else → do G first. Then I (small, mostly frontend). F1 (events) stays early
+because H and C2 both feed on it. So: **G → I → F1 → B → C → D/F2 → H → E**,
+with A2 (immersion mode) slotted whenever a travel-content creator actually
+shows up.
+
 ## Decisions to confirm with Sean (defaults chosen; don't block on these)
 
 1. **Rev-share model**: platform pool split by engagement (default, ready to
    build) vs per-creator subscriptions. Formula %: default 70/30 creator/platform.
-2. **Free AI allowance** before the premium wall: default 5 calls/month.
+2. ~~Free AI allowance before the premium wall~~ SUPERSEDED by Workstream I
+   (2026-07-19): flashcards are the free tier; everything else is behind
+   sign-up/subscription, so no free AI allowance. (The `ai_usage` counter
+   from C1 is still worth building — as abuse protection, not a free tier.)
 3. **Anonymous error-flagging**: default no (account required).
 4. **Pricing**: he sets amounts in Stripe; code reads price IDs from secrets.
 
