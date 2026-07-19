@@ -648,9 +648,13 @@ Simplest safe pattern — do NOT invent RLS admin policies:
 - New Edge Function `admin-stats`, `verify_jwt=true`, plus in-function check:
   resolve `callerUserId` (copy the helper from `connect-channel/index.ts`),
   then compare the caller's user id against the `ADMIN_USER_IDS` secret
-  (comma-separated auth user ids). Not in the list → 403. Sean sets the
-  secret with his own auth user id (he can read it from Supabase Dashboard →
-  Authentication → Users).
+  (comma-separated auth user ids). Not in the list → 403. Sean's auth user
+  id (looked up 2026-07-19; he is the only auth user, email
+  sean.ogrady712@gmail.com) is `7afa7716-080b-49a3-bc5e-90659e10b39d` —
+  tell Sean to set `ADMIN_USER_IDS=7afa7716-080b-49a3-bc5e-90659e10b39d`
+  in Supabase → Edge Functions → Secrets when this workstream is built.
+  If in doubt, re-verify the id against his email in Supabase Dashboard →
+  Authentication → Users.
 - All queries inside run with the service-role client (cross-tenant reads
   never touch RLS).
 
