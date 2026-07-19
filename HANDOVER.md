@@ -543,6 +543,39 @@ direct calls to the functions endpoint). Verify with:
 `curl -X POST https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/tts -H "Authorization: Bearer <anon key>" -H "Content-Type: application/json" -d '{"text":"Bore da","language":"Welsh"}'`
 — expect `{"audioData":"...","success":true}`. Frontend ships via PR #2.
 
+## Design system — premium pass (2026-07-19)
+
+Sean's brief: the site looked "cheap and dull"; wanted premium + innovative
+but classy — "no shiny buttons and animations". The move was contrast +
+craft, not effects:
+
+- **Tokens (index.css)**: emerald re-saturated (#16805c/#0e6a4b/#0a5138),
+  paper cleaned up, and two NEW families — `pine-800/900/950` (deep
+  green-black for dark sections; never use flat ink-900 panels again) and
+  `gold-400/500/600` (restrained brass, ONLY for hairlines, numerals and
+  eyebrow labels — never buttons or large fills; that's the classy line).
+  `brand-*` aliases updated to match. Utilities: `.eyebrow` (small-caps label
+  with leading rule), `.bg-dotgrid` (faded hero texture), `.bg-pine-lines`
+  (very faint ledger rules on pine — keep opacity ≤0.02, at 0.045 it fought
+  real dividers).
+- **Fonts (index.html)**: Fraunces now loads REAL italics + 700 (the old URL
+  had no italic axis, so `italic` rendered faux). Inter unchanged.
+- **Landing page (Home.tsx)** fully rebuilt, single `max-w-6xl` grid so
+  edges align page-long: hero (bigger serif headline, fact row with hairline
+  dividers) → ribbon strip → How-it-works (asymmetric two-column, oversized
+  brass numerals) → **Showcase** (three faithful product mock-cards:
+  flashcard+speaker, quiz, AI tutor chat — decorative, aria-hidden) →
+  value props 2×2 → **RevShare** (pine-950 close: "Your teaching should
+  earn.", 3-step numbered list, honest "Payouts launching soon" tag, CTAs
+  inside it) → pine footer. Old ShowcaseCTA/LogoStrip removed.
+- Rev-share copy deliberately gives NO percentage (the 70/30 split is still
+  a pending decision — ROADMAP C) and carries the "launching soon" tag; keep
+  both until Stripe ships.
+- Verified via Playwright screenshots desktop+mobile (sandbox blocks Google
+  Fonts so screenshots show fallback serif; prod loads Fraunces). Inner app
+  pages inherit the richer tokens automatically; a matching polish pass on
+  Login/TeacherPage/dashboard is worthwhile follow-up, same rules.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation
