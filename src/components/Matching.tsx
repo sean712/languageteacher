@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { MatchingPayload } from '../lib/activity-schemas';
+import SpeakButton from './SpeakButton';
 
-type Props = { payload: MatchingPayload; onComplete?: () => void };
+type Props = {
+  payload: MatchingPayload;
+  language?: string | null;
+  onComplete?: () => void;
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -14,7 +19,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 // Tap a term on the left, then its match on the right. Correct pairs lock in
 // green; a wrong attempt flashes red. Pair identity is the original index.
-export default function Matching({ payload, onComplete }: Props) {
+export default function Matching({ payload, language, onComplete }: Props) {
   const pairs = payload.pairs;
   const lefts = useMemo(
     () => shuffle(pairs.map((p, i) => ({ id: i, text: p.left }))),
@@ -62,24 +67,28 @@ export default function Matching({ payload, onComplete }: Props) {
             const isSelected = selected === l.id;
             const isWrong = wrongPair?.[0] === l.id;
             return (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => !isMatched && setSelected(l.id)}
-                disabled={isMatched}
-                className={[
-                  'px-3 py-3 rounded-xl border text-sm text-left transition-colors',
-                  isMatched
-                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                    : isWrong
-                    ? 'bg-red-50 border-red-400 text-red-700'
-                    : isSelected
-                    ? 'bg-ink-900 border-ink-900 text-paper-50'
-                    : 'bg-paper-50 border-paper-300 text-ink-900 hover:border-ink-400',
-                ].join(' ')}
-              >
-                {l.text}
-              </button>
+              // The left column is the target language — each tile gets a
+              // speaker beside it (sibling, not nested in the tile button).
+              <div key={l.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => !isMatched && setSelected(l.id)}
+                  disabled={isMatched}
+                  className={[
+                    'flex-1 min-w-0 px-3 py-3 rounded-xl border text-sm text-left transition-colors',
+                    isMatched
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                      : isWrong
+                      ? 'bg-red-50 border-red-400 text-red-700'
+                      : isSelected
+                      ? 'bg-ink-900 border-ink-900 text-paper-50'
+                      : 'bg-paper-50 border-paper-300 text-ink-900 hover:border-ink-400',
+                  ].join(' ')}
+                >
+                  {l.text}
+                </button>
+                <SpeakButton text={l.text} language={language} size="sm" />
+              </div>
             );
           })}
         </div>

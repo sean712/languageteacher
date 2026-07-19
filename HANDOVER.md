@@ -502,6 +502,41 @@ Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
    lift. Creators can also just do this themselves from the new ChannelManage
    card once the frontend ships.
 
+## TTS pronunciation (Workstream G, built + deployed 2026-07-19)
+
+Clickable pronunciation for taught words/phrases, ported from Sean's
+`lexical2.0` repo (see ROADMAP Workstream G for the full spec):
+
+- **Edge Function `tts` v1** (deployed, verify_jwt=true — the anon key passes
+  it BY DESIGN: flashcards are the free tier and TTS is their core value;
+  300-char cap is the only guard). POST `{ text, language }` → base64 mp3.
+  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice);
+  everything else → Polly (Welsh = `Gwyneth`). The language normaliser
+  accepts everything found in prod `videos.language`: English names, ISO
+  codes, and native names (`Cymraeg`→cy, `français`→fr…). Unknown language
+  (e.g. Cornish) → 400, and the UI simply shows no speaker button.
+- **Client**: `src/lib/audio-player.ts` (Lexical port minus its auto-play
+  queue, plus an in-session clip cache + `hasVoice()`), and
+  `src/components/SpeakButton.tsx` (self-hiding, stopPropagation, never
+  nested inside another button — flashcard/matching tiles are buttons, so
+  the speaker sits as a SIBLING).
+- **Wired into all five activities**: flashcard card (bottom-right, always
+  plays the term), matching left column, gap-fill solved sentences, quiz
+  "Hear it" row after answering, quick-practice revealed answer.
+  `LessonActivities` passes `video.language` down.
+
+**Sean must do (the one blocker):** copy `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_REGION` from the Lexical 2.0 Supabase project
+into languageteacher's Edge Function secrets (Dashboard → Edge Functions →
+Secrets). Until then Polly languages (Welsh/French/…) return 500
+"AWS credentials not configured" — **Irish works immediately** (Abair needs
+no key). No redeploy needed after setting secrets.
+
+**Not smoke-tested from the build session** (its network policy blocks
+direct calls to the functions endpoint). Verify with:
+`curl -X POST https://nyekhfvkaujfrfulofmg.supabase.co/functions/v1/tts -H "Authorization: Bearer <anon key>" -H "Content-Type: application/json" -d '{"text":"Bore da","language":"Welsh"}'`
+— expect `{"audioData":"...","success":true}`. Frontend ships via PR #2.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation

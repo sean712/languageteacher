@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { QuizPayload } from '../lib/activity-schemas';
+import SpeakButton from './SpeakButton';
+import { hasVoice } from '../lib/audio-player';
 
-type Props = { payload: QuizPayload; onComplete?: () => void };
+type Props = {
+  payload: QuizPayload;
+  language?: string | null;
+  onComplete?: () => void;
+};
 
-export default function Quiz({ payload, onComplete }: Props) {
+export default function Quiz({ payload, language, onComplete }: Props) {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
@@ -87,6 +93,19 @@ export default function Quiz({ payload, onComplete }: Props) {
           );
         })}
       </div>
+
+      {isAnswered && hasVoice(language) && (
+        <div className="mt-3 flex items-center gap-1.5">
+          <SpeakButton
+            text={q.options[q.correct_index]}
+            language={language}
+            size="sm"
+          />
+          <span className="text-sm text-ink-500">
+            Hear it: <span className="text-ink-700">{q.options[q.correct_index]}</span>
+          </span>
+        </div>
+      )}
 
       {isAnswered && q.explanation && (
         <p className="mt-3 text-sm text-ink-500">{q.explanation}</p>

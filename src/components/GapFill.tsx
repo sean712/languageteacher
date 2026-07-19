@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { GapFillPayload } from '../lib/activity-schemas';
+import SpeakButton from './SpeakButton';
 
-type Props = { payload: GapFillPayload; onComplete?: () => void };
+type Props = {
+  payload: GapFillPayload;
+  language?: string | null;
+  onComplete?: () => void;
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -19,7 +24,7 @@ function splitBlank(s: string): [string, string] {
   return [s.slice(0, m.index), s.slice(m.index + m[0].length)];
 }
 
-export default function GapFill({ payload, onComplete }: Props) {
+export default function GapFill({ payload, language, onComplete }: Props) {
   const items = payload.items;
   // A word bank: one chip per answer, shuffled, each usable once.
   const bank = useMemo(
@@ -109,6 +114,14 @@ export default function GapFill({ payload, onComplete }: Props) {
                 {filledWord ?? '     '}
               </button>
               <span>{after}</span>
+              {checked && isBlankCorrect(i) && (
+                <SpeakButton
+                  text={`${before}${item.answer}${after}`.trim()}
+                  language={language}
+                  size="sm"
+                  className="align-middle ml-1"
+                />
+              )}
               {item.hint && !solved && (
                 <span className="block text-xs text-ink-400 mt-1">
                   Hint: {item.hint}

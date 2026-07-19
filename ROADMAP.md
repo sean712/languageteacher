@@ -478,7 +478,14 @@ Summary of the brief:
 4. **Admin dashboard** for Sean (platform owner): platform stats, top
    channels, revenue. Workstream H below.
 
-## Workstream G — TTS pronunciation (Polly + Abair)
+## Workstream G — TTS pronunciation (Polly + Abair) — BUILT 2026-07-19
+
+Status: `tts` Edge Function v1 deployed; client player + SpeakButton wired
+into all five activities (ships with the frontend via PR #2). Remaining:
+Sean sets the AWS secrets (see the TTS section of HANDOVER.md), and a
+post-deploy smoke test (blocked by the build session's network policy).
+The spec below is kept for reference and for the deferred niceties
+(per-IP rate limiting, notes/notebook speakers).
 
 **Goal:** in every activity, tapping a target-language word or phrase (or a
 small speaker icon next to it) plays its pronunciation. Amazon Polly for most
