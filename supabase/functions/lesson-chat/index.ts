@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
     });
     const { data: video } = await supabase
       .from('videos')
-      .select('title,language,level,transcript,status')
+      .select('title,language,level,transcript,status,teacher_id')
       .eq('id', videoId)
       .maybeSingle();
 
@@ -96,6 +96,7 @@ Deno.serve(async (req: Request) => {
       language: string | null;
       level: string | null;
       transcript: string;
+      teacher_id: string;
     };
 
     const ai = getAIProvider();
@@ -106,6 +107,19 @@ Deno.serve(async (req: Request) => {
       transcript: v.transcript,
       messages: clean,
     });
+
+    // Server-side ai_chat event (Workstream F1) — the authoritative rev-share
+    // signal. Best-effort: never fail the reply over analytics.
+    try {
+      await supabase.from('lesson_events').insert({
+        teacher_id: v.teacher_id,
+        video_id: videoId,
+        user_id: userId,
+        event: 'ai_chat',
+      });
+    } catch (e) {
+      console.warn('ai_chat event insert failed', e);
+    }
 
     return json({ reply });
   } catch (err) {

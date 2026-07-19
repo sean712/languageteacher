@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 import { readLocalDone, writeLocalDone } from './progress';
+import { track } from './track';
 
 // Activity completion for a lesson. Anonymous → localStorage only. Signed in →
 // loads from the account, merges with anything local, and writes through to the
@@ -75,7 +76,7 @@ export function useCompleted(videoId: string) {
 // calling component handles the "sign in to save" redirect. Data is owned by
 // the auth user (RLS), so it syncs across devices.
 
-export function useSavedLesson(videoId: string) {
+export function useSavedLesson(videoId: string, teacherId?: string) {
   const { user } = useAuth();
   const [saved, setSaved] = useState(false);
   const [ready, setReady] = useState(false);
@@ -115,11 +116,12 @@ export function useSavedLesson(videoId: string) {
         .eq('video_id', videoId);
     } else {
       setSaved(true);
+      if (teacherId) track('save', { teacherId, videoId });
       await supabase
         .from('saved_lessons')
         .insert({ user_id: user.id, video_id: videoId });
     }
-  }, [user, saved, videoId]);
+  }, [user, saved, videoId, teacherId]);
 
   return { saved, ready, toggle, signedIn: Boolean(user) };
 }
@@ -164,6 +166,7 @@ export function useFollowChannel(teacherId: string) {
         .eq('teacher_id', teacherId);
     } else {
       setFollowing(true);
+      track('follow', { teacherId });
       await supabase
         .from('followed_channels')
         .insert({ user_id: user.id, teacher_id: teacherId });

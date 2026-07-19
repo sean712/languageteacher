@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { useFollowChannel } from '../lib/learner';
+import { track } from '../lib/track';
 import type {
   ActivityRow,
   TeacherRow,
@@ -52,6 +53,14 @@ export default function TeacherPage() {
     // Restore grid scroll after the grid re-renders.
     requestAnimationFrame(() => window.scrollTo(0, gridScrollY.current));
   };
+
+  // One lesson_view per open, covering both the click path and ?l= deep links
+  // (which never go through openLesson).
+  useEffect(() => {
+    if (teacher && openId) {
+      track('lesson_view', { teacherId: teacher.id, videoId: openId });
+    }
+  }, [teacher, openId]);
 
   useEffect(() => {
     if (!teacherSlug) return;

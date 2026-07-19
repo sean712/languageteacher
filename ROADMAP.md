@@ -397,7 +397,13 @@ can't orphan a channel accidentally.
 
 ## Workstream F — Events + creator stats dashboard
 
-### F1. Event collection (do EARLY — see build order)
+### F1. Event collection — SHIPPED 2026-07-19 (see HANDOVER)
+
+`lesson_events` table applied; `src/lib/track.ts` + server-side AI event
+logging live. Only `lesson-chat` redeploy is pending (see HANDOVER). The
+`channel_stats_daily` rollup below and the dashboard UI (F2) are still to do.
+
+Original spec kept for reference:
 
 - **Migration** `lesson_events`:
   ```sql
@@ -693,7 +699,10 @@ No link to `/admin` from anywhere public — Sean just knows the URL.
 account (and anonymous) gets a 403/not-found; page renders sanely with
 Stripe not yet built (zeros, not crashes).
 
-## Workstream I — New free/premium boundary (flashcards free)
+## Workstream I — New free/premium boundary (flashcards free) — SHIPPED 2026-07-19
+
+Frontend live via `src/lib/access.ts` (`canUse`). See HANDOVER. Spec kept
+for reference (the server-side hardening note still applies as future work).
 
 **Sean's rule (2026-07-19), supersedes the old "static = free" boundary:**
 

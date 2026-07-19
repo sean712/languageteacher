@@ -576,6 +576,44 @@ craft, not effects:
   pages inherit the richer tokens automatically; a matching polish pass on
   Login/TeacherPage/dashboard is worthwhile follow-up, same rules.
 
+## Free boundary + event tracking (Workstreams I + F1, 2026-07-19)
+
+**Free/premium boundary (Workstream I) — SHIPPED (frontend).** Sean's rule:
+flashcards free for everyone (with TTS); everything else needs an account
+(subscription once Stripe lands). `src/lib/access.ts` `canUse(feature, user)`
+is the SINGLE gate — flashcards always true, everything else `Boolean(user)`
+for now; tightening to subscribed = one line here once C1's `is_premium`
+exists. `LessonActivities` routes every pick through `canUse`; non-flashcard
+tiles show the "Account" tag when signed out and bounce anonymous users to
+`/login` (returns to the lesson). Removed the old `PREMIUM_ACTIVITIES` set.
+
+**Event tracking (Workstream F1) — SHIPPED (schema + client + AI events).**
+- Migration `lesson_events` APPLIED (repo copy:
+  `supabase/migrations/20260719_lesson_events.sql`). Insert-only RLS for
+  anon+authenticated (can't spoof another user_id); NO select/update/delete —
+  raw events are service-role only. Events: lesson_view / activity_start /
+  activity_complete / lesson_complete / save / follow / ai_chat / ai_feedback.
+- Client: `src/lib/track.ts` — fire-and-forget, never throws into UI, stamps a
+  localStorage `anon_id`. Wired: lesson_view (TeacherPage effect, covers deep
+  links), activity_start/complete + lesson_complete (LessonActivities), save
+  (useSavedLesson — now takes teacherId), follow (useFollowChannel).
+- **AI events are logged SERVER-SIDE** (authoritative rev-share signal, can't
+  be spoofed): `ai_feedback` in evaluate-sentence, `ai_chat` in lesson-chat.
+  FreeWrite now sends `video_id` so evaluate-sentence can resolve the teacher.
+
+**⚠️ PENDING DEPLOY (do this before relying on ai_chat counts):**
+`evaluate-sentence` is deployed **v5** (ai_feedback logging live). But
+**`lesson-chat` still needs redeploy** — its ai_chat logging + the added
+`teacher_id` select are in the repo (`supabase/functions/lesson-chat/
+index.ts`) but the Supabase deploy was blocked mid-session (MCP approval
+gating during a connection flap). Redeploy it (verify_jwt=true, full shared
+file set — same 7-file set as evaluate-sentence) via MCP. Until then, AI
+tutor chat still works; it just doesn't log the ai_chat event. Everything
+else (boundary, all client events, ai_feedback) is live.
+
+Aggregation rollup (`channel_stats_daily`) + the dashboards (F2/H) that read
+these events are still to build — next up.
+
 ## Future / parked ideas
 
 - **Remotion marketing video.** Sean chose a native in-page hero animation
