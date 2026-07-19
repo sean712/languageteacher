@@ -507,14 +507,20 @@ Creator-declared teaching language, end to end (ROADMAP.md Workstream A1):
 Clickable pronunciation for taught words/phrases, ported from Sean's
 `lexical2.0` repo (see ROADMAP Workstream G for the full spec):
 
-- **Edge Function `tts` v1** (deployed, verify_jwt=true — the anon key passes
+- **Edge Function `tts` v2** (deployed, verify_jwt=true — the anon key passes
   it BY DESIGN: flashcards are the free tier and TTS is their core value;
   300-char cap is the only guard). POST `{ text, language }` → base64 mp3.
-  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice);
-  everything else → Polly (Welsh = `Gwyneth`). The language normaliser
-  accepts everything found in prod `videos.language`: English names, ISO
-  codes, and native names (`Cymraeg`→cy, `français`→fr…). Unknown language
-  (e.g. Cornish) → 400, and the UI simply shows no speaker button.
+  Irish → Abair (free, keyless, `ga_CO_snc_piper` Connemara voice —
+  **confirmed working by Sean 2026-07-19**); everything else → Polly
+  (Welsh = `Gwyneth`). The language normaliser accepts English names, ISO
+  codes, and native names (`Cymraeg`→cy, `français`→fr…).
+  **POLICY (Sean):** creators can teach ANY language — if Polly has a voice
+  we offer TTS, if not we just don't (unknown language → 400, UI hides the
+  speaker button; e.g. Cornish/Basque/Scottish Gaelic get none). v2 covers
+  Polly's full catalogue incl. Japanese/Korean/Hindi/Russian/Romanian/
+  Czech/Catalan/Cantonese. Adding a future Polly language = one line each in
+  NAME_TO_CODE + VOICE_MAP + POLLY_LANG (function) and SPEAKABLE (client
+  mirror in audio-player.ts) — keep the two files in sync.
 - **Client**: `src/lib/audio-player.ts` (Lexical port minus its auto-play
   queue, plus an in-session clip cache + `hasVoice()`), and
   `src/components/SpeakButton.tsx` (self-hiding, stopPropagation, never

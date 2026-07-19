@@ -40,6 +40,12 @@ function json(body: unknown, status = 200) {
 
 // Stored language value (lowercased) → TTS code. Mirrored client-side in
 // src/lib/audio-player.ts (hasVoice) — keep the two in sync.
+//
+// POLICY (Sean, 2026-07-19): creators can teach ANY language. If Polly (or
+// Abair for Irish) has a voice for it, we offer TTS; if not, we simply don't
+// — the UI hides the speaker button. This map covers Polly's full language
+// catalogue; adding a newly-supported Polly language = one line here, in
+// VOICE_MAP/POLLY_LANG below, and in the client mirror.
 const NAME_TO_CODE: Record<string, string> = {
   welsh: 'cy', cymraeg: 'cy', cy: 'cy',
   irish: 'ga', gaeilge: 'ga', ga: 'ga',
@@ -47,28 +53,40 @@ const NAME_TO_CODE: Record<string, string> = {
   german: 'de', deutsch: 'de', de: 'de',
   spanish: 'es', 'español': 'es', espanol: 'es', es: 'es',
   italian: 'it', italiano: 'it', it: 'it',
-  portuguese: 'pt', pt: 'pt',
+  portuguese: 'pt', 'português': 'pt', pt: 'pt',
   'brazilian portuguese': 'pt-br', 'portuguese (brazilian)': 'pt-br', 'pt-br': 'pt-br',
-  dutch: 'nl', nl: 'nl',
-  danish: 'da', da: 'da',
-  finnish: 'fi', fi: 'fi',
-  icelandic: 'is', is: 'is',
-  norwegian: 'no', no: 'no', nb: 'no',
-  polish: 'pl', pl: 'pl',
-  swedish: 'sv', sv: 'sv',
-  turkish: 'tr', tr: 'tr',
+  dutch: 'nl', nederlands: 'nl', nl: 'nl',
+  danish: 'da', dansk: 'da', da: 'da',
+  finnish: 'fi', suomi: 'fi', fi: 'fi',
+  icelandic: 'is', 'íslenska': 'is', is: 'is',
+  norwegian: 'no', norsk: 'no', no: 'no', nb: 'no',
+  polish: 'pl', polski: 'pl', pl: 'pl',
+  swedish: 'sv', svenska: 'sv', sv: 'sv',
+  turkish: 'tr', 'türkçe': 'tr', tr: 'tr',
   arabic: 'arb', ar: 'arb', arb: 'arb',
   'mandarin chinese': 'cmn-CN', mandarin: 'cmn-CN', chinese: 'cmn-CN',
   'cmn-cn': 'cmn-CN', zh: 'cmn-CN',
+  cantonese: 'yue', yue: 'yue',
+  japanese: 'ja', '日本語': 'ja', ja: 'ja',
+  korean: 'ko', '한국어': 'ko', ko: 'ko',
+  hindi: 'hi', hi: 'hi',
+  russian: 'ru', ru: 'ru',
+  romanian: 'ro', ro: 'ro',
+  czech: 'cs', cs: 'cs',
+  catalan: 'ca', 'català': 'ca', ca: 'ca',
   english: 'en-GB', 'en-gb': 'en-GB', 'en-us': 'en-US', en: 'en-GB',
 };
 
-// Polly voice per code — Lexical's proven map (Welsh = Gwyneth).
+// Polly voice per code — Lexical's proven map (Welsh = Gwyneth), extended to
+// the rest of Polly's catalogue. Standard-engine voices preferred (available
+// in every region); Jitka/Arlet/Hiujin are neural-only.
 const VOICE_MAP: Record<string, string> = {
   'cmn-CN': 'Zhiyu', arb: 'Zeina', cy: 'Gwyneth', da: 'Naja', nl: 'Lotte',
   fi: 'Suvi', fr: 'Celine', de: 'Marlene', is: 'Dora', it: 'Carla',
   no: 'Liv', pl: 'Ewa', 'pt-br': 'Camila', pt: 'Ines', es: 'Penelope',
   sv: 'Astrid', tr: 'Filiz', 'en-US': 'Matthew', 'en-GB': 'Amy',
+  ja: 'Mizuki', ko: 'Seoyeon', hi: 'Aditi', ru: 'Tatyana', ro: 'Carmen',
+  cs: 'Jitka', ca: 'Arlet', yue: 'Hiujin',
 };
 
 // Polly's LanguageCode parameter wants region-qualified codes.
@@ -77,12 +95,14 @@ const POLLY_LANG: Record<string, string> = {
   de: 'de-DE', is: 'is-IS', it: 'it-IT', no: 'nb-NO', pl: 'pl-PL',
   'pt-br': 'pt-BR', pt: 'pt-PT', es: 'es-ES', sv: 'sv-SE', tr: 'tr-TR',
   'en-GB': 'en-GB', 'en-US': 'en-US', 'cmn-CN': 'cmn-CN', arb: 'arb',
+  ja: 'ja-JP', ko: 'ko-KR', hi: 'hi-IN', ru: 'ru-RU', ro: 'ro-RO',
+  cs: 'cs-CZ', ca: 'ca-ES', yue: 'yue-CN',
 };
 
 const NEURAL_VOICES = new Set([
   'Matthew', 'Joanna', 'Amy', 'Emma', 'Brian', 'Ivy', 'Kevin', 'Kimberly',
   'Salli', 'Joey', 'Justin', 'Kendra', 'Ruth', 'Stephen', 'Aria', 'Ayanda',
-  'Gabrielle', 'Liam',
+  'Gabrielle', 'Liam', 'Jitka', 'Arlet', 'Hiujin',
 ]);
 
 function toTtsCode(language: unknown): string | null {
